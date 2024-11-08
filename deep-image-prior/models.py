@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 
-class ResNet(torch.nn.Module):
+class UNet(torch.nn.Module):
     def __init__(self, n_channels_output: int = 3):
         super().__init__()
         # define skip connections processing modules
