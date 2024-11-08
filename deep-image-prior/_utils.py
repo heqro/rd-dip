@@ -1,3 +1,4 @@
+from typing import Tuple
 import torch
 from torch import Tensor
 import torchvision
@@ -103,3 +104,43 @@ def psnr_with_mask(
     mask_size = (mask > 0).sum().item()
     mse = ((img_1 - img_2) ** 2 * mask).sum() / mask_size
     return 10 * torch.log10(data_range**2 / mse)
+
+
+def grads(image: Tensor, direction="forward") -> Tuple[Tensor, Tensor]:
+    """Computes image gradients (dy/dx) for a given image."""
+    batch_size, channels, height, width = image.shape
+
+    if direction == "forward":
+        dy = image[..., 1:, :] - image[..., :-1, :]
+        dx = image[..., :, 1:] - image[..., :, :-1]
+
+        shape_y = [batch_size, channels, 1, width]
+        dy = torch.cat(
+            [dy, torch.zeros(shape_y, device=image.device, dtype=image.dtype)], dim=2
+        )
+        dy = dy.view(image.shape)
+
+        shape_x = [batch_size, channels, height, 1]
+        dx = torch.cat(
+            [dx, torch.zeros(shape_x, device=image.device, dtype=image.dtype)], dim=3
+        )
+        dx = dx.view(image.shape)
+    elif direction == "backward":
+        dy = image[..., 1:, :] - image[..., :-1, :]
+        dx = image[..., :, 1:] - image[..., :, :-1]
+
+        shape_y = [batch_size, channels, 1, width]
+        dy = torch.cat(
+            [torch.zeros(shape_y, device=image.device, dtype=image.dtype), dy], dim=2
+        )
+        dy = dy.view(image.shape)
+
+        shape_x = [batch_size, channels, height, 1]
+        dx = torch.cat(
+            [torch.zeros(shape_x, device=image.device, dtype=image.dtype), dx], dim=3
+        )
+        dx = dx.view(image.shape)
+    else:
+        raise ValueError("Invalid direction")
+
+    return dy, dx
