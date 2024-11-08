@@ -13,8 +13,11 @@ def load_rgb_image(path: str):
     return __load_image__(path, torchvision.io.image.ImageReadMode.RGB)
 
 
-def load_gray_image(path: str):
-    return __load_image__(path, torchvision.io.image.ImageReadMode.GRAY)
+def load_gray_image(path: str, is_mask=False):
+    img = __load_image__(path, torchvision.io.image.ImageReadMode.GRAY)
+    if is_mask:
+        img[img > 0] = img.max()
+    return img
 
 
 def crop_image(img, d=32):
