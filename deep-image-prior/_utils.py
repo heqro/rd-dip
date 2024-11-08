@@ -49,7 +49,7 @@ def add_gaussian_noise(img: Tensor, avg: float, std: float) -> Tensor:
 #     return img + noise_vector.reshape(img.shape).astype('float32')
 
 
-def add_rician_noise(u, sigma, kspace=False) -> torch.Tensor:
+def add_rician_noise_old(u: Tensor, sigma: float, kspace=False) -> torch.Tensor:
     if kspace:
         j = complex(0, 1)
         j = np.asarray(j)[None, None, None, ...]
@@ -70,7 +70,13 @@ def add_rician_noise(u, sigma, kspace=False) -> torch.Tensor:
         f_real = u + sigma * np.random.randn(u.shape[0], u.shape[1], u.shape[2])
         f_imag = sigma * np.random.randn(u.shape[0], u.shape[1], u.shape[2])
         f = np.sqrt(f_real**2 + f_imag**2)
-    return f
+    return torch.tensor(f, dtype=torch.float32)
+
+
+def add_rician_noise(img: Tensor, std: float) -> Tensor:
+    img_real = img + std * torch.randn(img.shape)
+    img_imag = std * torch.randn(img.shape)
+    return (img_real**2 + img_imag**2).sqrt().to(img.device)
 
 
 def print_image(img: ndarray, file_name: str | None):
