@@ -34,8 +34,9 @@ def pad_image(img: Tensor, new_height: int, new_width: int):
     return padding
 
 
-def add_gaussian_noise(img, avg: float, std: float) -> torch.Tensor:
-    return img + np.random.normal(avg, std, img.shape).astype("float32")
+def add_gaussian_noise(img: Tensor, avg: float, std: float) -> Tensor:
+    noise = avg + std * torch.randn(img.shape, device=img.device)
+    return img + noise
 
 
 # def add_rician_noise(img, std: float) -> torch.Tensor:
