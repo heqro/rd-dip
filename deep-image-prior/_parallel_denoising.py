@@ -1,3 +1,4 @@
+import os
 from models import UNet as Model
 from piqa import PSNR, SSIM
 import torch
@@ -6,6 +7,7 @@ import numpy as np
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import losses_and_regularizers
 import torch.multiprocessing as mp
+import pandas as pd
 
 dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 psnr = PSNR()
@@ -32,7 +34,7 @@ def denoise(loss_config: losses_and_regularizers.CompositeLoss, shared_data: dic
     best_psnr = -np.inf
     best_img = shared_data["noisy_gt_gpu"]
 
-    for it in range(5000):
+    for it in range(4000):
         opt.zero_grad()
         noisy_seed_dev = _utils.add_gaussian_noise(seed_gpu, avg=0, std=0.05)
         prediction = model.forward(noisy_seed_dev)
@@ -70,12 +72,13 @@ def denoise(loss_config: losses_and_regularizers.CompositeLoss, shared_data: dic
 
 def denoise_parallel(
     loss_config: losses_and_regularizers.CompositeLoss,
-    output_dict: dict,
-    idx: int,
+    tag: str,
     shared_data: dict,
 ):
     loss_log, psnr_log, ssim_log, best_img = denoise(loss_config, shared_data)
-    output_dict[idx] = (loss_log, psnr_log, ssim_log, best_img)
+    data = {"Loss": loss_log, "PSNR": psnr_log, "SSIM": ssim_log}
+    pd.DataFrame(data).to_csv(f"results_{tag}.csv", index=False)
+    _utils.print_image(best_img, f"best_img_{tag}.png")
 
 
 if __name__ == "__main__":
@@ -109,60 +112,72 @@ if __name__ == "__main__":
     )
 
     experiments = [
-        losses_and_regularizers.LossConfig(
-            losses=[(losses_and_regularizers.Gaussian(), 1.0)], regularizers=[]
+        (
+            losses_and_regularizers.LossConfig(
+                losses=[(losses_and_regularizers.Gaussian(), 1.0)], regularizers=[]
+            ),
+            "Gaussian",
         ),
-        losses_and_regularizers.LossConfig(
-            losses=[(losses_and_regularizers.Rician(0.15), 1.0)], regularizers=[]
+        (
+            losses_and_regularizers.LossConfig(
+                losses=[(losses_and_regularizers.Rician(0.15), 1.0)], regularizers=[]
+            ),
+            "Rician",
         ),
-        losses_and_regularizers.LossConfig(
-            losses=[(losses_and_regularizers.RicianNorm(0.15), 1.0)], regularizers=[]
+        (
+            losses_and_regularizers.LossConfig(
+                losses=[(losses_and_regularizers.RicianNorm(0.15), 1.0)],
+                regularizers=[],
+            ),
+            "Rician_norm",
         ),
     ]
 
-    mp.set_start_method("spawn", force=True)
+    mp.set_start_method("spawn")
     manager = mp.Manager()
-    output_dict = manager.dict()
+
     processes = [
         mp.Process(
-            target=denoise_parallel, args=(experiment, output_dict, idx, shared_data)
+            target=denoise_parallel,
+            args=(
+                losses_and_regularizers.CompositeLoss(experiment[0]),
+                experiment[1],
+                shared_data,
+            ),
+            name=experiment[1],
         )
-        for experiment, idx in enumerate(experiments)
+        for experiment in experiments
     ]
 
     for p in processes:
         p.start()
+    loss_lists, psnr_lists, ssim_lists = [], [], []
     for p in processes:
         p.join()
-
-    loss_gaussian, psnr_gaussian, ssim_gaussian, best_img_gaussian = output_dict[0]
-    loss_rician, psnr_rician, ssim_rician, best_img_rician = output_dict[1]
-    loss_rician_norm, psnr_rician_norm, ssim_rician_norm, best_img_rician_norm = (
-        output_dict[2]
-    )
+        df = pd.read_csv(f"results_{p.name}.csv")
+        loss_lists += [(df["Loss"].tolist(), p.name)]
+        psnr_lists += [(df["PSNR"].tolist(), p.name)]
+        ssim_lists += [(df["SSIM"].tolist(), p.name)]
+        os.remove(f"results_{p.name}.csv")
 
     import matplotlib.pyplot as plt
 
-    plt.plot(psnr_gaussian, label=f"Gaussian (max.: {np.max(psnr_gaussian):.2f})")
-    plt.plot(psnr_rician, label=f"Rician (max.: {np.max(psnr_rician):.2f})")
-    plt.plot(
-        psnr_rician_norm, label=f"Rician norm (max.: {np.max(psnr_rician_norm):.2f})"
-    )
+    for psnr_list in psnr_lists:
+        plt.plot(
+            psnr_list[0], label=f"{psnr_list[1]} (max.: {np.max(psnr_list[0]):.2f})"
+        )
+
     plt.legend()
     plt.savefig(f"psnr.pdf", bbox_inches="tight")
     plt.close()
 
-    plt.plot(ssim_gaussian, label=f"Gaussian (max.: {np.max(ssim_gaussian):.2f})")
-    plt.plot(ssim_rician, label=f"Rician (max.: {np.max(ssim_rician):.2f})")
-    plt.plot(
-        ssim_rician_norm, label=f"Rician norm (max.: {np.max(ssim_rician_norm):.2f})"
-    )
+    for ssim_list in ssim_lists:
+        plt.plot(
+            ssim_list[0], label=f"{ssim_list[1]} (max.: {np.max(ssim_list[0]):.2f})"
+        )
+
     plt.legend()
     plt.savefig(f"ssim.pdf", bbox_inches="tight")
     plt.close()
-
-    _utils.print_image(best_img_gaussian, "best_img_gaussian.png")
-    _utils.print_image(best_img_rician, "best_img_rician.png")
-    _utils.print_image(best_img_rician_norm, "best_img_rician_norm.png")
 
     print()
