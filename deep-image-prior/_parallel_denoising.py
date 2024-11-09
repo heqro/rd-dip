@@ -108,48 +108,26 @@ if __name__ == "__main__":
         "noisy_slice.png",
     )
 
-    gaussian_loss = losses_and_regularizers.LossConfig(
-        losses=[(losses_and_regularizers.Gaussian(), 1.0)], regularizers=[]
-    )
-    rician_loss = losses_and_regularizers.LossConfig(
-        losses=[(losses_and_regularizers.Rician(0.15), 1.0)], regularizers=[]
-    )
-    rician_norm_loss = losses_and_regularizers.LossConfig(
-        losses=[(losses_and_regularizers.RicianNorm(0.15), 1.0)], regularizers=[]
-    )
+    experiments = [
+        losses_and_regularizers.LossConfig(
+            losses=[(losses_and_regularizers.Gaussian(), 1.0)], regularizers=[]
+        ),
+        losses_and_regularizers.LossConfig(
+            losses=[(losses_and_regularizers.Rician(0.15), 1.0)], regularizers=[]
+        ),
+        losses_and_regularizers.LossConfig(
+            losses=[(losses_and_regularizers.RicianNorm(0.15), 1.0)], regularizers=[]
+        ),
+    ]
 
     mp.set_start_method("spawn", force=True)
     manager = mp.Manager()
     output_dict = manager.dict()
-
     processes = [
         mp.Process(
-            target=denoise_parallel,
-            args=(
-                losses_and_regularizers.CompositeLoss(gaussian_loss),
-                output_dict,
-                0,
-                shared_data,
-            ),
-        ),
-        mp.Process(
-            target=denoise_parallel,
-            args=(
-                losses_and_regularizers.CompositeLoss(rician_loss),
-                output_dict,
-                1,
-                shared_data,
-            ),
-        ),
-        mp.Process(
-            target=denoise_parallel,
-            args=(
-                losses_and_regularizers.CompositeLoss(rician_norm_loss),
-                output_dict,
-                2,
-                shared_data,
-            ),
-        ),
+            target=denoise_parallel, args=(experiment, output_dict, idx, shared_data)
+        )
+        for experiment, idx in enumerate(experiments)
     ]
 
     for p in processes:
