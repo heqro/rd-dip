@@ -108,39 +108,47 @@ def psnr_with_mask(
 
 def grads(image: Tensor, direction="forward") -> Tuple[Tensor, Tensor]:
     """Computes image gradients (dy/dx) for a given image."""
-    batch_size, channels, height, width = image.shape
+    channels, height, width = image.shape
 
     if direction == "forward":
         dy = image[..., 1:, :] - image[..., :-1, :]
         dx = image[..., :, 1:] - image[..., :, :-1]
 
-        shape_y = [batch_size, channels, 1, width]
+        shape_y = [channels, 1, width]
         dy = torch.cat(
-            [dy, torch.zeros(shape_y, device=image.device, dtype=image.dtype)], dim=2
+            [dy, torch.zeros(shape_y, device=image.device, dtype=image.dtype)], dim=1
         )
         dy = dy.view(image.shape)
 
-        shape_x = [batch_size, channels, height, 1]
+        shape_x = [channels, height, 1]
         dx = torch.cat(
-            [dx, torch.zeros(shape_x, device=image.device, dtype=image.dtype)], dim=3
+            [dx, torch.zeros(shape_x, device=image.device, dtype=image.dtype)], dim=2
         )
         dx = dx.view(image.shape)
     elif direction == "backward":
         dy = image[..., 1:, :] - image[..., :-1, :]
         dx = image[..., :, 1:] - image[..., :, :-1]
 
-        shape_y = [batch_size, channels, 1, width]
+        shape_y = [channels, 1, width]
         dy = torch.cat(
-            [torch.zeros(shape_y, device=image.device, dtype=image.dtype), dy], dim=2
+            [torch.zeros(shape_y, device=image.device, dtype=image.dtype), dy], dim=1
         )
         dy = dy.view(image.shape)
 
-        shape_x = [batch_size, channels, height, 1]
+        shape_x = [channels, height, 1]
         dx = torch.cat(
-            [torch.zeros(shape_x, device=image.device, dtype=image.dtype), dx], dim=3
+            [torch.zeros(shape_x, device=image.device, dtype=image.dtype), dx], dim=2
         )
         dx = dx.view(image.shape)
     else:
         raise ValueError("Invalid direction")
 
     return dy, dx
+
+
+def laplacian(image: Tensor, p=1.0, eps=0.0):
+    dx, dy = grads(image)
+    grad_magnitude = (dx**2 + dy**2 + eps).sqrt().pow(p - 2)
+    dx_weighted, _ = grads(dx * grad_magnitude, "backward")
+    _, dy_weighted = grads(dy * grad_magnitude, "backward")
+    return dx_weighted + dy_weighted
