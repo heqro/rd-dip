@@ -4,7 +4,7 @@ import torch
 from torch import Tensor, i0, nn, log
 from torch.special import i1
 from typing import List, Tuple
-from _utils import grads
+from _utils import grads, laplacian
 
 
 # Base protocol for losses
@@ -75,6 +75,26 @@ class Rician_Norm(LossFunction):
             (
                 (prediction * r_inv - target)
                 / (self.std**2 * prediction.shape[1] * prediction.shape[2])
+            )
+            .square()
+            .mean()
+        )
+
+
+class Laplacian_Rician_Norm(LossFunction):
+    def __init__(self, σ: float, λ: float):
+        self.σ = σ
+        self.λ = λ
+
+    def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
+        r_inv = i0(prediction * target / self.σ**2) / i1(
+            prediction * target / self.σ**2
+        )
+        Δ = laplacian(prediction, p=1.0, eps=1e-6)
+        return (
+            (
+                (Δ * r_inv - self.λ * (prediction * r_inv - target))
+                / (self.σ**2 * prediction.shape[1] * prediction.shape[2])
             )
             .square()
             .mean()
