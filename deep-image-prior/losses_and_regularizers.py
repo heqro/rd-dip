@@ -63,17 +63,17 @@ class Rician(LossFunction):
         ).mean()
 
 
-class RicianNorm(LossFunction):
+class Rician_Norm(LossFunction):
     def __init__(self, std: float):
         self.std = std
 
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
-        r = i0(prediction * target / self.std**2) / i1(
+        r_inv = i0(prediction * target / self.std**2) / i1(
             prediction * target / self.std**2
         )
         return (
             (
-                (prediction * r - target)
+                (prediction * r_inv - target)
                 / (self.std**2 * prediction.shape[1] * prediction.shape[2])
             )
             .square()
