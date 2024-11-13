@@ -154,6 +154,9 @@ if __name__ == "__main__":
     loss_lists, psnr_lists, ssim_lists = [], [], []
     for p in processes:
         p.join()
+        print(f"Process {p.name} terminated with exit code {p.exitcode}")
+        if p.exitcode != 0:
+            continue
         df = pd.read_csv(f"results_{p.name}.csv")
         loss_lists += [(df["Loss"].tolist(), p.name)]
         psnr_lists += [(df["PSNR"].tolist(), p.name)]
