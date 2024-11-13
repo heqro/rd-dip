@@ -93,7 +93,7 @@ class Laplacian_Rician_Norm(LossFunction):
         Δ = laplacian(prediction, p=1.0, eps=1e-6)
         return (
             (
-                (Δ * r_inv - self.λ * (prediction * r_inv - target))
+                (Δ - self.λ * (prediction * r_inv - target))
                 / (self.σ**2 * prediction.shape[1] * prediction.shape[2])
             )
             .square()
