@@ -4,8 +4,7 @@ from piqa import PSNR, SSIM
 import torch
 import _utils
 import numpy as np
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-import losses_and_regularizers
+from losses_and_regularizers import *
 import torch.multiprocessing as mp
 import pandas as pd
 
@@ -14,7 +13,7 @@ psnr = PSNR()
 ssim = SSIM(n_channels=1).to(dev)
 
 
-def denoise(loss_config: losses_and_regularizers.CompositeLoss, shared_data: dict):
+def denoise(loss_config: CompositeLoss, shared_data: dict):
     model = Model(n_channels_output=1).to(dev)
     seed_cpu = torch.from_numpy(
         np.random.uniform(
@@ -71,14 +70,14 @@ def denoise(loss_config: losses_and_regularizers.CompositeLoss, shared_data: dic
 
 
 def denoise_parallel(
-    loss_config: losses_and_regularizers.CompositeLoss,
+    loss_config: CompositeLoss,
     tag: str,
     shared_data: dict,
 ):
     loss_log, psnr_log, ssim_log, best_img = denoise(loss_config, shared_data)
     data = {"Loss": loss_log, "PSNR": psnr_log, "SSIM": ssim_log}
     pd.DataFrame(data).to_csv(f"results_{tag}.csv", index=False)
-    _utils.print_image(best_img, f"best_img_{tag}.png")
+    _utils.print_image(best_img, f"results/denoised_images/best_img_{tag}.png")
 
 
 if __name__ == "__main__":
@@ -140,7 +139,7 @@ if __name__ == "__main__":
         mp.Process(
             target=denoise_parallel,
             args=(
-                losses_and_regularizers.CompositeLoss(experiment[0]),
+                CompositeLoss(experiment[0]),
                 experiment[1],
                 shared_data,
             ),
