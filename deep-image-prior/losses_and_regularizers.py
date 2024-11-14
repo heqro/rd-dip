@@ -100,15 +100,16 @@ class Rician_Norm(LossFunction):
 
 
 class Laplacian_Rician_Norm(LossFunction):
-    def __init__(self, σ: float, λ: float):
+    def __init__(self, σ: float, λ: float, p: float = 1.0):
         self.σ = σ
         self.λ = λ
+        self.p = p
 
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
         r_inv = i0(prediction * target / self.σ**2) / i1(
             prediction * target / self.σ**2
         )
-        Δ = laplacian(prediction, p=1.0, eps=1e-6)
+        Δ = laplacian(prediction, p=self.p, eps=1e-6)
         return (
             (
                 (Δ - self.λ * (prediction * r_inv - target))
@@ -120,10 +121,10 @@ class Laplacian_Rician_Norm(LossFunction):
 
 
 class TotalVariation(RegularizationTerm):
-    def __init__(self, p=1.0, eps=1e-6):
+    def __init__(self, p=1.0, ε=1e-6):
         self.p = p
-        self.eps = eps
+        self.ε = ε
 
     def regularization(self, prediction: Tensor) -> Tensor:
         grad_x, grad_y = grads(prediction)
-        return (grad_x**2 + grad_y**2 + self.eps).pow(self.p / 2).mean()
+        return (grad_x**2 + grad_y**2 + self.ε).pow(self.p / 2).mean()
