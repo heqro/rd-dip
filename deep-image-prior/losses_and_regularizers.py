@@ -5,6 +5,7 @@ from torch import Tensor, i0, nn, log
 from torch.special import i1
 from typing import List, Tuple
 from _utils import grads, laplacian
+from torch.nn import functional as F
 
 
 # Base protocol for losses
@@ -120,7 +121,7 @@ class Laplacian_Rician_Norm(LossFunction):
         )
 
 
-class TotalVariation(RegularizationTerm):
+class Total_Variation(RegularizationTerm):
     def __init__(self, p=1.0, ε=1e-6):
         self.p = p
         self.ε = ε
@@ -128,3 +129,48 @@ class TotalVariation(RegularizationTerm):
     def regularization(self, prediction: Tensor) -> Tensor:
         grad_x, grad_y = grads(prediction)
         return (grad_x**2 + grad_y**2 + self.ε).pow(self.p / 2).mean()
+
+
+class Discrete_Cosine_Transform(RegularizationTerm):
+    def __init__(
+        self, device: torch.device, dim: int = 3, p: float = 1.0, ε: float = 1e-6
+    ):
+
+        def generate_dct_filters(n: int, skip_first=True):
+            from scipy.fft import idct
+
+            filters = torch.zeros(size=(n**2, n, n))
+
+            for i in range(n):
+                for j in range(n):
+                    filter = torch.zeros((n, n))
+                    filter[i, j] = 1
+                    filters[i * n + j, ...] = torch.from_numpy(
+                        idct(idct(filter, norm="ortho").T, norm="ortho")
+                    )
+            return filters[skip_first:]
+
+        self.p, self.ε = p, ε
+        self.filters = nn.Parameter(
+            generate_dct_filters(dim)[:, None, ...], requires_grad=False
+        ).to(device)
+
+    def phi(self, x: Tensor, p=1.0):
+        return (1 / p) * ((x**2).sum(dim=1) + self.ε**2).pow(p / 2)
+
+    def regularization(self, prediction: Tensor) -> Tensor:
+        if len(prediction.shape) == 3:
+            prediction = prediction[:, None, ...]
+        if len(prediction.shape) != 4:
+            raise Exception(
+                f"Expected prediction to have shape 4, but it is {len(prediction.shape)}"
+            )
+        b, c, w, h = prediction.shape
+        prediction = prediction.view(c, b, w, h)  # more efficient
+        # z = z.permute(1, 0, 2, 3) #
+        k_x_3 = F.conv2d(prediction, weight=self.filters, groups=1, dilation=1)
+        y = (
+            self.phi(k_x_3, p=self.p) / self.filters.shape[0]
+        )  # divide by number of filters
+
+        return y.mean()
