@@ -31,8 +31,8 @@ def load_serialized_image(path: str, is_mask=False, normalize=True) -> Tensor:
 
 
 def crop_image(img, d=32):
-    new_height = img.shape[0] - img.shape[0] % d
-    new_width = img.shape[1] - img.shape[1] % d
+    new_height = img.shape[-2] - img.shape[-2] % d
+    new_width = img.shape[-1] - img.shape[-1] % d
     return img[..., :new_height, :new_width]
 
 
