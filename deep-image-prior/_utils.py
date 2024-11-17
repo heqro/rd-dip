@@ -21,6 +21,15 @@ def load_gray_image(path: str, is_mask=False):
     return img
 
 
+def load_serialized_image(path: str, is_mask=False, normalize=True) -> Tensor:
+    img = torch.load(path).to(dtype=torch.float32)
+    if is_mask:
+        img[img > 0] = img.max()
+    if normalize:
+        img = (img - img.min()) / (img.max() - img.min())
+    return img
+
+
 def crop_image(img, d=32):
     new_height = img.shape[0] - img.shape[0] % d
     new_width = img.shape[1] - img.shape[1] % d
