@@ -103,7 +103,14 @@ def psnr_with_mask(
 ):
     mask_size = (mask > 0).sum().item()
     mse = ((img_1 - img_2) ** 2 * mask).sum() / mask_size
-    return 10 * torch.log10(data_range**2 / mse)
+    if (
+        isinstance(img_1, Tensor)
+        and isinstance(img_2, Tensor)
+        and isinstance(mask, Tensor)
+    ):
+        return 10 * torch.log10(data_range**2 / mse)
+    else:
+        return 10 * np.log10(data_range**2 / mse)
 
 
 def grads(image: Tensor, direction="forward") -> Tuple[Tensor, Tensor]:
