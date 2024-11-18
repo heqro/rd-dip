@@ -31,7 +31,7 @@ def denoise(loss_config: CompositeLoss, shared_data: dict):
         np.random.uniform(
             0,
             0.1,
-            size=(3, shared_data["gt_gpu"].shape[1], shared_data["gt_gpu"].shape[2]),
+            size=(3, shared_data["gt_gpu"].shape[-2], shared_data["gt_gpu"].shape[-1]),
         ).astype("float32")
     )[None, :]
     seed_gpu = seed_cpu.to(dev)
