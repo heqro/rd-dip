@@ -14,6 +14,10 @@ class LossFunction(Protocol):
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
         pass
 
+    @abstractmethod
+    def get_mask() -> Tensor:
+        pass
+
 
 # Base protocol for regularization terms
 class RegularizationTerm(Protocol):
@@ -49,8 +53,23 @@ class CompositeLoss(nn.Module):
 
 
 class Gaussian(LossFunction):
+    def __init__(self, use_mask=False):
+        self.use_mask = use_mask
+        self.mask = None
+
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
-        return torch.nn.functional.mse_loss(prediction, target)
+        if self.mask is None:  # initialize mask for the first time
+            self.mask = torch.ones_like(
+                prediction, requires_grad=self.use_mask
+            )  # learnable mask only if necessary
+        if (self.mask < 0).any():
+            print(f"WARN: {self.__class__.__name__} mask features negative entries")
+        return (self.mask * (prediction - target)).square().mean()
+
+    def get_mask(self) -> Tensor:
+        if self.mask is None:
+            raise Exception("Mask is None. Apply loss() to initialize it.")
+        return self.mask
 
 
 class Rician(LossFunction):
@@ -62,6 +81,9 @@ class Rician(LossFunction):
             prediction.square() / (2 * self.std**2)
             - log(i0(target * prediction / self.std**2))
         ).mean()
+
+    def get_mask(self):
+        raise NotImplementedError("Not implemented yet")
 
 
 class Rician_Norm_Unstable(LossFunction):
@@ -81,6 +103,9 @@ class Rician_Norm_Unstable(LossFunction):
             .mean()
         )
 
+    def get_mask(self):
+        raise NotImplementedError("Not implemented yet")
+
 
 class Rician_Norm(LossFunction):
     def __init__(self, std: float):
@@ -98,6 +123,9 @@ class Rician_Norm(LossFunction):
             .square()
             .mean()
         )
+
+    def get_mask(self):
+        raise NotImplementedError("Not implemented yet")
 
 
 class Laplacian_Rician_Norm(LossFunction):
@@ -119,6 +147,9 @@ class Laplacian_Rician_Norm(LossFunction):
             .square()
             .mean()
         )
+
+    def get_mask(self):
+        raise NotImplementedError("Not implemented yet")
 
 
 class Total_Variation(RegularizationTerm):
