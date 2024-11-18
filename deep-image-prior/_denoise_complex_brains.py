@@ -19,9 +19,25 @@ def denoise_parallel(
     loss_config: CompositeLoss,
     tag: str,
     shared_data: dict,
+    contaminate_with_Gaussian: bool,
 ):
-    loss_log, psnr_log, ssim_log, best_img = denoise(loss_config, shared_data)
-    data = {"Loss": loss_log, "PSNR": psnr_log, "SSIM": ssim_log}
+    (
+        loss_log,
+        psnr_log,
+        ssim_log,
+        best_img,
+        stop_criterion_mask_idx,
+        stop_criterion_idx,
+    ) = denoise(
+        loss_config, shared_data, contaminate_with_Gaussian=contaminate_with_Gaussian
+    )
+    data = {
+        "Loss": loss_log,
+        "PSNR": psnr_log,
+        "SSIM": ssim_log,
+        "Stop_criterion_mask_idx": stop_criterion_mask_idx,
+        "Stop_criterion_idx": stop_criterion_idx,
+    }
     pd.DataFrame(data).to_csv(
         f"results/Brain{shared_data['idx']}/csvs/{tag}.csv", index=False
     )
@@ -89,9 +105,10 @@ if __name__ == "__main__":
         "noisy_gt_gpu": noisy_gt_gpu,
         "mask_gpu": mask_gpu,
         "idx": idx,
+        "std": float(std),
     }
-
-    test_name = f"Std{std}_Gaussian_DCT_Dim3_p=1"
+    contaminate_with_Gaussian = False  # if False, add Rician noise each DIP iteration
+    test_name = f"Std{std}_Rician_TV{'_PerturbationRician' if contaminate_with_Gaussian else ''}"
     experiments = [
         (
             LossConfig(
@@ -150,6 +167,7 @@ if __name__ == "__main__":
                 CompositeLoss(experiment[0]),
                 experiment[1],
                 shared_data,
+                contaminate_with_Gaussian,
             ),
             name=experiment[1],
         )
