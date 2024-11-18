@@ -84,9 +84,9 @@ def add_rician_noise_old(u: Tensor, sigma: float, kspace=False) -> torch.Tensor:
 
 
 def add_rician_noise(img: Tensor, std: float) -> Tensor:
-    img_real = img + std * torch.randn(img.shape)
-    img_imag = std * torch.randn(img.shape)
-    return (img_real**2 + img_imag**2).sqrt().to(img.device)
+    img_real = img + std * torch.randn(img.shape, device=img.device)
+    img_imag = std * torch.randn(img.shape, device=img.device)
+    return (img_real**2 + img_imag**2).sqrt()
 
 
 def print_image(img: ndarray, file_name: str | None):
