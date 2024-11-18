@@ -8,7 +8,9 @@ from torch.nn.functional import mse_loss as MSE
 from torch import Tensor
 
 
-def denoise(loss_config: CompositeLoss, shared_data: dict):
+def denoise(
+    loss_config: CompositeLoss, shared_data: dict, contaminate_with_Gaussian=True
+):
     def stopping_criterion(prediction: Tensor, noisy_img: Tensor, std: float):
         omega = 1
         for dim in prediction.shape:
@@ -46,7 +48,11 @@ def denoise(loss_config: CompositeLoss, shared_data: dict):
 
     for it in range(10000):
         opt.zero_grad()
-        noisy_seed_dev = _utils.add_gaussian_noise(seed_gpu, avg=0, std=0.05)
+        noisy_seed_dev = (
+            _utils.add_gaussian_noise(seed_gpu, avg=0, std=0.05)
+            if contaminate_with_Gaussian
+            else _utils.add_rician_noise(seed_gpu, std=0.15)
+        )
         prediction = model.forward(noisy_seed_dev)
         loss = loss_config.forward(prediction[0], shared_data["noisy_gt_gpu"])
 
