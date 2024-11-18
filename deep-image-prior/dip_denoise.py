@@ -4,9 +4,25 @@ import numpy as np
 from models import UNet as Model
 import _utils
 from piqa import PSNR, SSIM
+from torch.nn.functional import mse_loss as MSE
+from torch import Tensor
 
 
 def denoise(loss_config: CompositeLoss, shared_data: dict):
+    def stopping_criterion(prediction: Tensor, noisy_img: Tensor, std: float):
+        omega = 1
+        for dim in prediction.shape:
+            omega = omega * dim
+        return MSE(prediction, noisy_img) < std**2
+
+    def stopping_criterion_mask(
+        prediction: Tensor, noisy_img: Tensor, mask: Tensor, std: float
+    ):
+        omega = (mask > 0).sum().item()
+        prediction = prediction * mask
+        noisy_img = noisy_img * mask
+        return ((prediction - noisy_img) * mask).square().sum() / omega < std**2
+
     dev = shared_data["gt_gpu"].device
     psnr = PSNR()
     ssim = SSIM(n_channels=1).to(dev)
@@ -25,6 +41,8 @@ def denoise(loss_config: CompositeLoss, shared_data: dict):
     loss_log, psnr_log, ssim_log = [], [], []
     best_psnr = -np.inf
     best_img = shared_data["noisy_gt_gpu"]
+    reached_stopping_criterion = reached_stopping_criterion_mask = False
+    stopping_criterion_idx = stopping_criterion_mask_idx = None
 
     for it in range(10000):
         opt.zero_grad()
@@ -48,7 +66,21 @@ def denoise(loss_config: CompositeLoss, shared_data: dict):
         if best_psnr < it_psnr_mask:
             best_psnr = it_psnr_mask
             best_img = prediction
-
+        if not reached_stopping_criterion:
+            if stopping_criterion(
+                prediction[0], shared_data["noisy_gt_gpu"], shared_data["std"]
+            ):
+                reached_stopping_criterion = True
+                stopping_criterion_idx = it
+        if not reached_stopping_criterion_mask:
+            if stopping_criterion_mask(
+                prediction[0],
+                shared_data["noisy_gt_gpu"],
+                shared_data["mask_gpu"],
+                shared_data["std"],
+            ):
+                reached_stopping_criterion_mask = True
+                stopping_criterion_mask_idx = it
         loss.backward()
         opt.step()
 
@@ -56,4 +88,11 @@ def denoise(loss_config: CompositeLoss, shared_data: dict):
         (best_img * shared_data["mask_gpu"]).squeeze().cpu().detach().numpy() * 255
     ).astype(np.uint8)
 
-    return loss_log, psnr_log, ssim_log, best_img
+    return (
+        loss_log,
+        psnr_log,
+        ssim_log,
+        best_img,
+        stopping_criterion_mask_idx,
+        stopping_criterion_idx,
+    )
