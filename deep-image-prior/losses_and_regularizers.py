@@ -39,18 +39,30 @@ class CompositeLoss(nn.Module):
     def __init__(self, config: LossConfig):
         super(CompositeLoss, self).__init__()
         self.config = config
+        # Logging utilities
+        self.total_loss_log: list[float] = []
+        self.fid_loss_log: dict[str, list[float]] = {}
+        self.reg_loss_log: dict[str, list[float]] = {}
+        for loss_fn, _ in self.config["fidelities"]:
+            self.fid_loss_log[loss_fn.__class__.__name__] = []
+        for loss_fn, _ in self.config["regularizers"]:
+            self.reg_loss_log[loss_fn.__class__.__name__] = []
 
-    def forward(self, prediction: Tensor, target: Tensor) -> Tensor:
+    def evaluate_losses(self, prediction: Tensor, target: Tensor) -> Tensor:
         total_loss = torch.tensor(0.0, device=prediction.device)
-        fid_losses, reg_losses = {}
         # Aggregate multiple losses
-        for loss_fn, lambda_loss in self.config["fidelities"]:
-            total_loss += lambda_loss * loss_fn.loss(prediction, target)
+        for fid_fn, lambda_loss in self.config["fidelities"]:
+            loss_fid = lambda_loss * fid_fn.loss(prediction, target)
+            self.fid_loss_log[fid_fn.__class__.__name__] += [loss_fid.item()]
+            total_loss += loss_fid
 
         # Aggregate multiple regularizers
         for reg_fn, lambda_reg in self.config["regularizers"]:
-            total_loss += lambda_reg * reg_fn.regularization(prediction)
+            loss_reg = lambda_reg * reg_fn.regularization(prediction)
+            self.reg_loss_log[reg_fn.__class__.__name__] += [loss_reg.item()]
+            total_loss += loss_reg
 
+        self.total_loss_log += [total_loss.item()]
         return total_loss
 
 
@@ -209,7 +221,9 @@ class Discrete_Cosine_Transform(RegularizationTerm):
         return y.mean()
 
 
-def load_experiment_config(fidelities: str, regularizers: str) -> CompositeLoss:
+def load_experiment_config(
+    fidelities: list[str], regularizers: list[str]
+) -> CompositeLoss:
     list_of_fidelities, list_of_regularizers = [], []
     # Parse losses
     for fid_entry in fidelities:
@@ -219,7 +233,7 @@ def load_experiment_config(fidelities: str, regularizers: str) -> CompositeLoss:
         if fid_class is None or not issubclass(fid_class, FidelityTerm):
             raise Exception(f"{loss_name} is not a valid FidelityTerm implementation")
         fid_instance = fid_class(*map(float, params))
-        list_of_fidelities += [(fid_instance), weight]
+        list_of_fidelities += [(fid_instance, weight)]
     # Parse regularizers
     for reg_entry in regularizers:
         reg_name, weight, *params = reg_entry.split(":")
