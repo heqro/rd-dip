@@ -10,7 +10,7 @@ from torch.nn import functional as F
 
 # Base protocol for losses
 @runtime_checkable
-class LossFunction(Protocol):
+class FidelityTerm(Protocol):
     @abstractmethod
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
         pass
@@ -30,7 +30,7 @@ class RegularizationTerm(Protocol):
 
 # Class for combining an abstract amount of losses & regularizers
 class LossConfig(TypedDict):
-    losses: List[Tuple[LossFunction, float]]
+    fidelities: List[Tuple[FidelityTerm, float]]
     regularizers: List[Tuple[RegularizationTerm, float]]
 
 
@@ -42,9 +42,9 @@ class CompositeLoss(nn.Module):
 
     def forward(self, prediction: Tensor, target: Tensor) -> Tensor:
         total_loss = torch.tensor(0.0, device=prediction.device)
-
+        fid_losses, reg_losses = {}
         # Aggregate multiple losses
-        for loss_fn, lambda_loss in self.config["losses"]:
+        for loss_fn, lambda_loss in self.config["fidelities"]:
             total_loss += lambda_loss * loss_fn.loss(prediction, target)
 
         # Aggregate multiple regularizers
@@ -54,15 +54,15 @@ class CompositeLoss(nn.Module):
         return total_loss
 
 
-class Gaussian(LossFunction):
+class Gaussian(FidelityTerm):
     def __init__(self, use_mask=False):
         self.use_mask = use_mask
         self.mask = None
 
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
         if self.mask is None:  # initialize mask for the first time
-            self.mask = torch.ones_like(
-                prediction, requires_grad=self.use_mask
+            self.mask = nn.Parameter(
+                torch.ones_like(prediction, requires_grad=self.use_mask)
             )  # learnable mask only if necessary
         if (self.mask < 0).any():
             print(f"WARN: {self.__class__.__name__} mask features negative entries")
@@ -74,7 +74,7 @@ class Gaussian(LossFunction):
         return self.mask
 
 
-class Rician(LossFunction):
+class Rician(FidelityTerm):
     def __init__(self, std: float):
         self.std = std
 
@@ -88,7 +88,7 @@ class Rician(LossFunction):
         raise NotImplementedError("Not implemented yet")
 
 
-class Rician_Norm_Unstable(LossFunction):
+class Rician_Norm_Unstable(FidelityTerm):
     def __init__(self, std: float):
         self.std = std
 
@@ -109,7 +109,7 @@ class Rician_Norm_Unstable(LossFunction):
         raise NotImplementedError("Not implemented yet")
 
 
-class Rician_Norm(LossFunction):
+class Rician_Norm(FidelityTerm):
     def __init__(self, std: float):
         self.std = std
 
@@ -130,7 +130,7 @@ class Rician_Norm(LossFunction):
         raise NotImplementedError("Not implemented yet")
 
 
-class Laplacian_Rician_Norm(LossFunction):
+class Laplacian_Rician_Norm(FidelityTerm):
     def __init__(self, σ: float, λ: float, p: float = 1.0):
         self.σ = σ
         self.λ = λ
@@ -207,3 +207,30 @@ class Discrete_Cosine_Transform(RegularizationTerm):
         )  # divide by number of filters
 
         return y.mean()
+
+
+def load_experiment_config(fidelities: str, regularizers: str) -> CompositeLoss:
+    list_of_fidelities, list_of_regularizers = [], []
+    # Parse losses
+    for fid_entry in fidelities:
+        loss_name, weight, *params = fid_entry.split(":")
+        weight = float(weight)
+        fid_class = globals().get(loss_name)
+        if fid_class is None or not issubclass(fid_class, FidelityTerm):
+            raise Exception(f"{loss_name} is not a valid FidelityTerm implementation")
+        fid_instance = fid_class(*map(float, params))
+        list_of_fidelities += [(fid_instance), weight]
+    # Parse regularizers
+    for reg_entry in regularizers:
+        reg_name, weight, *params = reg_entry.split(":")
+        weight = float(weight)
+        reg_class = globals().get(reg_name)
+        if reg_class is None or not issubclass(reg_class, RegularizationTerm):
+            raise Exception(
+                f"{reg_name} is not a valid RegularizationTerm implementation"
+            )
+        reg_instance = reg_class(*map(float, params))
+        list_of_regularizers += [(reg_instance, weight)]
+    return CompositeLoss(
+        LossConfig(fidelities=list_of_fidelities, regularizers=list_of_regularizers)
+    )
