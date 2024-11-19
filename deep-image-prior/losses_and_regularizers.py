@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Protocol, TypedDict
+from typing import Protocol, TypedDict, runtime_checkable
 import torch
 from torch import Tensor, i0, nn, log
 from torch.special import i1
@@ -9,6 +9,7 @@ from torch.nn import functional as F
 
 
 # Base protocol for losses
+@runtime_checkable
 class LossFunction(Protocol):
     @abstractmethod
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
@@ -20,6 +21,7 @@ class LossFunction(Protocol):
 
 
 # Base protocol for regularization terms
+@runtime_checkable
 class RegularizationTerm(Protocol):
     @abstractmethod
     def regularization(self, prediction: Tensor) -> Tensor:
