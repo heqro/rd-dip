@@ -22,7 +22,9 @@ envs/mri_env.yml
 deep-image-prior/results/*/ssim_results/*pdf
 deep-image-prior/results/*/psnr_results/*pdf
 deep-image-prior/results/*/loss_results/*pdf
-deep-image-prior/results/*/denoised_images/*png
 deep-image-prior/compare_psnr.py
 deep-image-prior/results/Subject_04/denoised_images/*png
 deep-image-prior/results/*/csvs/*
+deep-image-prior/results/*/csvs_old/*
+deep-image-prior/results/*/denoised_images/*png
+deep-image-prior/results/*/denoised_images_old/*png
