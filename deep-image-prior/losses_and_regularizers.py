@@ -203,7 +203,7 @@ class Discrete_Cosine_Transform(RegularizationTerm):
 
         self.p, self.ε = p, ε
         self.filters = nn.Parameter(
-            generate_dct_filters(dim)[:, None, ...], requires_grad=False
+            generate_dct_filters(int(dim))[:, None, ...], requires_grad=False
         ).to(device)
 
     def phi(self, x: Tensor, p=1.0):
