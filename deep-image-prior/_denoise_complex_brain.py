@@ -86,6 +86,7 @@ parser.add_argument(
         "'RegName:weight:param1:param2...'. Example: 'Total_Variation:0.1:1.0', "
         "'Discrete_Cosine_Transform:0.2:3:1.0:1e-6'"
     ),
+    default=[],
 )
 parser.add_argument(
     "--tag",
