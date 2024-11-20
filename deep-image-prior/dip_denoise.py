@@ -87,7 +87,7 @@ def denoise(
     best_img = shared_data["noisy_gt_gpu"]
     reached_stopping_criterion = reached_stopping_criterion_mask = False
 
-    for it in range(10):
+    for it in range(10000):
         opt.zero_grad()
         noisy_seed_dev = (
             _utils.add_gaussian_noise(seed_gpu, avg=0, std=0.05)
