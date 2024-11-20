@@ -1,6 +1,6 @@
 import numpy as np
 import os
-import pandas as pd
+import json
 import dash
 from dash import dcc, html, Input, Output
 import plotly.graph_objects as go
@@ -11,12 +11,12 @@ from flask import Flask
 from flask_httpauth import HTTPBasicAuth
 from werkzeug.security import check_password_hash, generate_password_hash
 
+
 # Path to the directory containing your CSV files
-CSV_DIRECTORY = "../deep-image-prior/results/Brain1/csvs"
-IMAGE_DIRECTORY = "../deep-image-prior/results/Brain1/denoised_images"
+JSON_DIRECTORY = "../deep-image-prior/results/Brain1/jsons"
 
 # Get the list of CSV files
-csv_files = [f for f in os.listdir(CSV_DIRECTORY) if f.endswith(".csv")]
+json_files = [f for f in os.listdir(JSON_DIRECTORY) if f.endswith(".json")]
 # Use Plotly's built-in color palette (e.g., 'Set1' from the qualitative palettes)
 color_palette = px.colors.qualitative.Set1  # Other options: Set2, Set3, etc.
 
@@ -53,10 +53,10 @@ def before_request():
 app.layout = html.Div(
     [
         html.H1("Experiment Data Comparison"),
-        html.Label("Select CSV files:"),
+        html.Label("Select JSON files:"),
         dcc.Dropdown(
-            id="csv-selector",
-            options=[{"label": f, "value": f} for f in csv_files],
+            id="json-selector",
+            options=[{"label": f, "value": f} for f in json_files],
             value=[],  # Default no file selected
             multi=True,
         ),
@@ -70,14 +70,36 @@ app.layout = html.Div(
 
 
 # Symlog transformation function
-def symlog_transform(data, linthresh=1.0, linscale=1.0):
-    return np.sign(data) * np.log1p(np.abs(data) / linthresh) * linscale
+
+
+def add_data_point(
+    fig,
+    max_data_idx: int,
+    max_data: float,
+    color,
+    iterations: list[int],
+    row: int,
+    col: int,
+    hovertext: str = "",
+):
+    fig.add_trace(
+        go.Scatter(
+            x=[iterations[max_data_idx]],
+            y=[max_data],
+            mode="markers",
+            marker=dict(color=color, size=10, line=dict(color="black", width=2)),
+            showlegend=False,
+            hovertext=hovertext,
+        ),  # Do not show in legend
+        row=row,
+        col=col,
+    )
 
 
 # Callback for interactive updates
 @app.callback(
     [Output("comparison-plot", "figure"), Output("image-display", "children")],
-    [Input("csv-selector", "value")],
+    [Input("json-selector", "value")],
 )
 def update_plot(selected_files):
     if not selected_files:
@@ -99,83 +121,120 @@ def update_plot(selected_files):
     # Loop through selected files and add traces
     color_cycle = itertools.cycle(color_palette)
     for file in selected_files:
-        data = pd.read_csv(os.path.join(CSV_DIRECTORY, file))
-        iterations = list(range(len(data)))
+        with open(f"{JSON_DIRECTORY}/{file}", "r") as jsonfile:
+            data = json.load(jsonfile)
+
+        iterations = list(
+            range(len(data["loss_log"]["overall_loss"]))
+        )  # for instance, grab it from here
         color = next(color_cycle)
 
+        stop_mask_idx = data["stopping_criteria_indices"]["mask_idx"]
+        stop_idx = data["stopping_criteria_indices"]["entire_image_idx"]
         # Create a line plot for Loss, PSNR, and SSIM using Plotly Express
 
-        if "Loss" in data:
-            transformed_loss = symlog_transform(data["Loss"])
-            fig.add_trace(
-                go.Scatter(
-                    x=iterations,
-                    y=transformed_loss,
-                    mode="lines",
-                    name=file,
-                    line=dict(color=color),
-                ),
-                row=1,
+        fig.add_trace(
+            go.Scatter(
+                x=iterations,
+                y=data["loss_log"]["overall_loss"],
+                mode="lines",
+                name=file,
+                line=dict(color=color),
+            ),
+            row=1,
+            col=1,
+        )
+        if stop_idx is not None and stop_idx.is_integer():
+            fig.add_hline(
+                y=data["loss_log"]["overall_loss"][stop_idx],
+                line=dict(color=color, width=2, dash="dash"),  # Line color and width
+                row=1,  # For subplots
                 col=1,
             )
-        if "PSNR" in data:
-            fig.add_trace(
-                go.Scatter(
-                    x=iterations,
-                    y=data["PSNR"],
-                    mode="lines",
-                    name=file,
-                    line=dict(color=color),
-                    showlegend=False,
-                ),
-                row=1,
-                col=2,
+        if stop_mask_idx is not None and stop_mask_idx.is_integer():
+            fig.add_hline(
+                y=data["loss_log"]["overall_loss"][stop_mask_idx],
+                line=dict(color=color, width=2, dash="dot"),  # Line color and width
+                row=1,  # For subplots
+                col=1,
             )
 
-            max_psnr_idx = data["PSNR"].idxmax()  # Get index of maximum PSNR
-            max_psnr = data["PSNR"].max()  # Get maximum PSNR value
-            fig.add_trace(
-                go.Scatter(
-                    x=[iterations[max_psnr_idx]],
-                    y=[max_psnr],
-                    mode="markers",
-                    marker=dict(
-                        color=color, size=10, line=dict(color="black", width=2)
-                    ),
-                    showlegend=False,
-                ),  # Do not show in legend
+        fig.add_trace(
+            go.Scatter(
+                x=iterations,
+                y=data["psnr_mask_log"],
+                mode="lines",
+                name=file,
+                line=dict(color=color),
+                showlegend=False,
+            ),
+            row=1,
+            col=2,
+        )
+        max_data = max(data["psnr_mask_log"])
+        max_data_idx = data["psnr_mask_log"].index(max_data)
+        add_data_point(fig, max_data_idx, max_data, color, iterations, 1, 2, hovertext="Maximum")  # type: ignore
+        if stop_mask_idx is not None and stop_mask_idx.is_integer():
+            add_data_point(
+                fig,
+                stop_mask_idx,
+                data["psnr_mask_log"][stop_mask_idx],
+                color,
+                iterations,
                 row=1,
                 col=2,
+                hovertext="Stopping criterion (mask)",
             )
-        if "SSIM" in data:
-            fig.add_trace(
-                go.Scatter(
-                    x=iterations,
-                    y=data["SSIM"],
-                    mode="lines",
-                    name=file,
-                    line=dict(color=color),
-                    showlegend=False,
-                ),
+        if stop_idx is not None and stop_idx.is_integer():
+            add_data_point(
+                fig,
+                stop_idx,
+                data["psnr_mask_log"][stop_idx],
+                color,
+                iterations,
+                row=1,
+                col=2,
+                hovertext="Stopping criterion (entire img)",
+            )
+
+        fig.add_trace(
+            go.Scatter(
+                x=iterations,
+                y=data["ssim_mask_log"],
+                mode="lines",
+                name=file,
+                line=dict(color=color),
+                showlegend=False,
+            ),
+            row=1,
+            col=3,
+        )
+        max_data = max(data["ssim_mask_log"])
+        max_data_idx = data["ssim_mask_log"].index(max_data)
+        add_data_point(fig, max_data_idx, max_data, color, iterations, 1, 3, hovertext="Maximum")  # type: ignore
+        if stop_mask_idx is not None and stop_mask_idx.is_integer():
+            add_data_point(
+                fig,
+                stop_mask_idx,
+                data["ssim_mask_log"][stop_mask_idx],
+                color,
+                iterations,
                 row=1,
                 col=3,
+                hovertext="Stopping criterion (mask)",
             )
-            # Add a marker at the maximum SSIM value
-            max_ssim_idx = data["SSIM"].idxmax()  # Get index of maximum SSIM
-            max_ssim = data["SSIM"].max()  # Get maximum SSIM value
-            fig.add_trace(
-                go.Scatter(
-                    x=[iterations[max_ssim_idx]],
-                    y=[max_ssim],
-                    mode="markers",
-                    marker=dict(
-                        color=color, size=10, line=dict(color="black", width=2)
-                    ),
-                    showlegend=False,
-                ),  # Do not show in legend
-                row=1,
-                col=3,
+        if stop_idx is not None and stop_idx.is_integer():
+            add_data_point(
+                fig,
+                stop_idx,
+                data["ssim_mask_log"][stop_idx],
+                color,
+                iterations,
+                1,
+                3,
+                hovertext="Stopping criterion (entire img)",
             )
+
         # fig.add_trace(ssim_trace.data[0], row=1, col=3)
 
     # Update layout with a single legend
@@ -221,24 +280,22 @@ def update_plot(selected_files):
         )
     )
     for file in selected_files:
-        image_name = file.replace(".csv", ".png")
-        image_path = os.path.join(IMAGE_DIRECTORY, image_name)
-        if os.path.exists(image_path):
-            images.append(
-                html.Div(
-                    [
-                        html.Img(
-                            src=f"assets/Brain1/{image_name}",
-                            style={"height": "256px", "border": "1px solid black"},
-                        ),
-                        html.P(
-                            f"{file[:18]}...",
-                            style={"text-align": "center"},
-                            title=file,
-                        ),
-                    ]
-                )
+        image_name = file.replace(".json", ".png")
+        images.append(
+            html.Div(
+                [
+                    html.Img(
+                        src=f"assets/Brain1/{image_name}",
+                        style={"height": "256px", "border": "1px solid black"},
+                    ),
+                    html.P(
+                        f"{file[:18]}...",
+                        style={"text-align": "center"},
+                        title=file,
+                    ),
+                ]
             )
+        )
 
     return fig, images
 
