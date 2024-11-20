@@ -178,7 +178,13 @@ class Total_Variation(RegularizationTerm):
 
 class Discrete_Cosine_Transform(RegularizationTerm):
     def __init__(
-        self, device: torch.device, dim: int = 3, p: float = 1.0, ε: float = 1e-6
+        self,
+        dim: int = 3,
+        p: float = 1.0,
+        ε: float = 1e-6,
+        device=(
+            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        ),
     ):
 
         def generate_dct_filters(n: int, skip_first=True):
