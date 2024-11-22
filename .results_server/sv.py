@@ -10,7 +10,7 @@ import itertools
 from flask import Flask
 from flask_httpauth import HTTPBasicAuth
 from werkzeug.security import check_password_hash, generate_password_hash
-
+from dash.dash_table import DataTable
 
 # Path to the directory containing your CSV files
 JSON_DIRECTORY = "../deep-image-prior/results/Brain1/jsons"
@@ -49,6 +49,19 @@ def before_request():
     pass
 
 
+table_data = []
+for file in json_files:
+    with open(os.path.join(JSON_DIRECTORY, file), "r") as jsonfile:
+        data = json.load(jsonfile)
+    table_data.append(
+        {
+            "File": file,
+            "PSNR Max": max(data["psnr_mask_log"]),
+            "SSIM Max": max(data["ssim_mask_log"]),
+        }
+    )
+
+
 # Layout
 app.layout = html.Div(
     [
@@ -64,6 +77,18 @@ app.layout = html.Div(
         html.Div(
             id="image-display",
             style={"display": "flex", "flex-wrap": "wrap", "gap": "10px"},
+        ),
+        html.Div(
+            [
+                html.H3("Summary Table (ALL DATA)"),
+                DataTable(
+                    id="summary-table",
+                    columns=[{"name": col, "id": col} for col in table_data[0].keys()],
+                    data=table_data,  # Fixed data
+                    style_table={"overflowX": "auto"},
+                    sort_action="native",
+                ),
+            ]
         ),
     ]
 )
@@ -249,8 +274,6 @@ def update_plot(selected_files):
                 2,
                 hovertext="Stopping criterion (entire img)",
             )
-
-        # fig.add_trace(ssim_trace.data[0], row=1, col=3)
 
     # Update layout with a single legend
     fig.update_layout(
