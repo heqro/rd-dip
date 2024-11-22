@@ -11,15 +11,29 @@ from flask import Flask
 from flask_httpauth import HTTPBasicAuth
 from werkzeug.security import check_password_hash, generate_password_hash
 from dash.dash_table import DataTable
+from table_utilities import *
 
 # Path to the directory containing your CSV files
 JSON_DIRECTORY = "../deep-image-prior/results/Brain1/jsons"
-
+FIDELITIES = ["Gaussian", "Rician", "Rician_Norm"]
+REGULARIZERS = ["Discrete_Cosine_Transform", "Total_Variation"]
 # Get the list of CSV files
 json_files = [f for f in os.listdir(JSON_DIRECTORY) if f.endswith(".json")]
 # Use Plotly's built-in color palette (e.g., 'Set1' from the qualitative palettes)
 color_palette = px.colors.qualitative.Set1  # Other options: Set2, Set3, etc.
-
+COEFS = [
+    "0",
+    "1e0",
+    "1e-1",
+    "1e-2",
+    "1e-3",
+    "1e-4",
+    "1e-5",
+    "1e-6",
+    "1e-7",
+    "1e-8",
+    "1e-9",
+]
 
 # Flask app
 server = Flask(__name__)
@@ -49,17 +63,34 @@ def before_request():
     pass
 
 
-table_data = []
-for file in json_files:
-    with open(os.path.join(JSON_DIRECTORY, file), "r") as jsonfile:
-        data = json.load(jsonfile)
-    table_data.append(
-        {
-            "File": file,
-            "PSNR Max": max(data["psnr_mask_log"]),
-            "SSIM Max": max(data["ssim_mask_log"]),
-        }
-    )
+full_table_data = load_full_table(json_files, JSON_DIRECTORY)
+
+
+df = load_tiered_table_columns(FIDELITIES, REGULARIZERS, json_files, JSON_DIRECTORY)
+df["lda"] = COEFS
+df = df[["lda"] + [col for col in df.columns if col != "lda"]]
+
+
+# Function to style cells
+def style_max(row):
+    styles = []
+    for col in df.columns[1:]:
+        max_value = df[col].max()
+        if row[col] == max_value:
+            styles.append(
+                {
+                    "if": {"column_id": col, "row_index": row.name},
+                    "backgroundColor": "#FFD700",
+                    "color": "black",
+                }
+            )
+    return styles
+
+
+# Apply styles to all rows
+cell_styles = []
+for index, row in df.iterrows():
+    cell_styles.extend(style_max(row))
 
 
 # Layout
@@ -80,11 +111,22 @@ app.layout = html.Div(
         ),
         html.Div(
             [
+                html.H3("Tiered table"),
+                DataTable(
+                    id="tiered-table",
+                    columns=[{"name": col, "id": col} for col in df.columns],
+                    data=df.to_dict("records"),  # Convert DataFrame to dict
+                    style_data_conditional=cell_styles,  # Apply styles
+                    style_table={"overflowX": "auto"},
+                    style_cell={"textAlign": "left"},
+                ),
                 html.H3("Summary Table (ALL DATA)"),
                 DataTable(
                     id="summary-table",
-                    columns=[{"name": col, "id": col} for col in table_data[0].keys()],
-                    data=table_data,  # Fixed data
+                    columns=[
+                        {"name": col, "id": col} for col in full_table_data[0].keys()
+                    ],
+                    data=full_table_data,  # Fixed data
                     style_table={"overflowX": "auto"},
                     sort_action="native",
                 ),
@@ -340,4 +382,4 @@ def update_plot(selected_files):
 
 # Run server
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0")
+    app.run(debug=False, host="0.0.0.0", port=8050)
