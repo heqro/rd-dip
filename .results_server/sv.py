@@ -107,10 +107,11 @@ def update_plot(selected_files):
 
     # Create a subplot with three columns and shared legend
     fig = make_subplots(
-        rows=1,
-        cols=3,
+        rows=2,
+        cols=2,
         subplot_titles=(
             "Loss",
+            "Addends",
             "PSNR",
             "SSIM",
         ),
@@ -159,6 +160,20 @@ def update_plot(selected_files):
                 col=1,
             )
 
+        for addend in data["loss_log"]["addends"].keys():
+            fig.add_trace(
+                go.Scatter(
+                    x=iterations,
+                    y=data["loss_log"]["addends"][addend]["values"],
+                    mode="lines",
+                    name=f'{data["loss_log"]["addends"][addend]['coefficient']}·{addend}',
+                    line=dict(color=color),
+                    showlegend=False,
+                ),
+                row=1,
+                col=2,
+            )
+
         fig.add_trace(
             go.Scatter(
                 x=iterations,
@@ -168,12 +183,12 @@ def update_plot(selected_files):
                 line=dict(color=color),
                 showlegend=False,
             ),
-            row=1,
-            col=2,
+            row=2,
+            col=1,
         )
         max_data = max(data["psnr_mask_log"])
         max_data_idx = data["psnr_mask_log"].index(max_data)
-        add_data_point(fig, max_data_idx, max_data, color, iterations, 1, 2, hovertext="Maximum")  # type: ignore
+        add_data_point(fig, max_data_idx, max_data, color, iterations, 2, 1, hovertext="Maximum")  # type: ignore
         if stop_mask_idx is not None and stop_mask_idx.is_integer():
             add_data_point(
                 fig,
@@ -181,8 +196,8 @@ def update_plot(selected_files):
                 data["psnr_mask_log"][stop_mask_idx],
                 color,
                 iterations,
-                row=1,
-                col=2,
+                row=2,
+                col=1,
                 hovertext="Stopping criterion (mask)",
             )
         if stop_idx is not None and stop_idx.is_integer():
@@ -192,8 +207,8 @@ def update_plot(selected_files):
                 data["psnr_mask_log"][stop_idx],
                 color,
                 iterations,
-                row=1,
-                col=2,
+                row=2,
+                col=1,
                 hovertext="Stopping criterion (entire img)",
             )
 
@@ -206,12 +221,12 @@ def update_plot(selected_files):
                 line=dict(color=color),
                 showlegend=False,
             ),
-            row=1,
-            col=3,
+            row=2,
+            col=2,
         )
         max_data = max(data["ssim_mask_log"])
         max_data_idx = data["ssim_mask_log"].index(max_data)
-        add_data_point(fig, max_data_idx, max_data, color, iterations, 1, 3, hovertext="Maximum")  # type: ignore
+        add_data_point(fig, max_data_idx, max_data, color, iterations, 2, 2, hovertext="Maximum")  # type: ignore
         if stop_mask_idx is not None and stop_mask_idx.is_integer():
             add_data_point(
                 fig,
@@ -219,8 +234,8 @@ def update_plot(selected_files):
                 data["ssim_mask_log"][stop_mask_idx],
                 color,
                 iterations,
-                row=1,
-                col=3,
+                row=2,
+                col=2,
                 hovertext="Stopping criterion (mask)",
             )
         if stop_idx is not None and stop_idx.is_integer():
@@ -230,8 +245,8 @@ def update_plot(selected_files):
                 data["ssim_mask_log"][stop_idx],
                 color,
                 iterations,
-                1,
-                3,
+                2,
+                2,
                 hovertext="Stopping criterion (entire img)",
             )
 
@@ -244,17 +259,17 @@ def update_plot(selected_files):
         legend=dict(
             title="Files", orientation="h", x=0.5, xanchor="center", y=-0.2
         ),  # Legend at the bottom
-        height=500,  # Adjust height
+        height=1000,  # Adjust height
         width=1200,  # Adjust width
     )
 
     # Add axis labels
     fig.update_xaxes(title_text="Iteration", row=1, col=1)
-    fig.update_xaxes(title_text="Iteration", row=1, col=2)
-    fig.update_xaxes(title_text="Iteration", row=1, col=3)
-    fig.update_yaxes(title_text="Loss", row=1, col=1)  # Symlog scale for Loss
-    fig.update_yaxes(title_text="PSNR", row=1, col=2)
-    fig.update_yaxes(title_text="SSIM", row=1, col=3)
+    fig.update_xaxes(title_text="Iteration", row=2, col=1)
+    fig.update_xaxes(title_text="Iteration", row=2, col=2)
+    fig.update_yaxes(title_text="Loss", row=1, col=1)
+    fig.update_yaxes(title_text="PSNR", row=2, col=1)
+    fig.update_yaxes(title_text="SSIM", row=2, col=2)
 
     images = []
     images.append(
