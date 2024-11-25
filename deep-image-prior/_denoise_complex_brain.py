@@ -4,8 +4,19 @@ import _utils
 import numpy as np
 from losses_and_regularizers import *
 from dip_denoise import denoise
+from models import *
 import argparse
 import json
+import sys
+
+is_debugging = False
+if is_debugging:
+    sys.argv += [
+        "--tag",
+        "Test",
+        "--model",
+        "AttentiveUNet",
+    ]
 
 dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 psnr = PSNR()
@@ -75,7 +86,7 @@ parser.add_argument(
         "Rician:0.5:0.15",
         "Gaussian:0.1",
     ],  # TODO blows up for 0.10 in Rician term?
-    required=True,
+    required=not is_debugging,
 )
 parser.add_argument(
     "--regularizers",
@@ -91,15 +102,22 @@ parser.add_argument(
 parser.add_argument(
     "--tag",
     type=str,
-    required=True,
+    required=not is_debugging,
     help=(
         "The tag for the experiment. It should reflect the characteristics of it for finding it easily along other results. An idea is Std$std_$Fidelities_$Regularizers"
     ),
 )
+parser.add_argument("--model", type=str, required=not is_debugging)
 
 
 # ⌨️
 args = parser.parse_args()
+model = globals().get(args.model)
+
+if model is None:
+    print(f"Model {args.model} not found")
+    quit(-1)
+model = model()  # initialize model with default parameters
 idx = args.index
 std = args.noise_std
 contaminate_with_Rician = args.contaminate_with_Rician_noise
@@ -117,6 +135,7 @@ shared_data = {
     "mask_gpu": mask_gpu,
     "idx": idx,
     "std": float(std),
+    "model": model,
 }
 report, best_img = denoise(
     composite_loss, shared_data, contaminate_with_Gaussian=not contaminate_with_Rician

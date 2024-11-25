@@ -71,7 +71,7 @@ def denoise(
     dev = shared_data["gt_gpu"].device
     psnr = PSNR()
     ssim = SSIM(n_channels=1).to(dev)
-    model = Model(n_channels_output=1).to(dev)
+    model = shared_data["model"].to(dev)
     seed_cpu = torch.from_numpy(
         np.random.uniform(
             0,
@@ -94,7 +94,7 @@ def denoise(
             if contaminate_with_Gaussian
             else _utils.add_rician_noise(seed_gpu, std=0.15)
         )
-        prediction = model.forward(noisy_seed_dev)
+        prediction = model.forward(noisy_seed_dev).clip(0, 1)
         if prediction.isnan().any():
             print("ERR: model.forward() returned NANs")
         loss = loss_config.evaluate_losses(prediction[0], shared_data["noisy_gt_gpu"])
