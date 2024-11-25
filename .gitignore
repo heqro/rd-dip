@@ -29,7 +29,11 @@ deep-image-prior/results/*/csvs_old/*
 deep-image-prior/results/*/denoised_images/*png
 deep-image-prior/results/*/denoised_images_old/*png
 deep-image-prior/kill_python.sh
-deep-image-prior/results/Brain1/jsons/*json
+deep-image-prior/results/Brain*/jsons/*json
 deep-image-prior/Experiments_Phase_1.sh
 deep-image-prior/.useful_scripts/exps.sh
 deep-image-prior/.complex_test_data/Denoising Results.txt
+deep-image-prior/_test.py
+deep-image-prior/rename.sh
+deep-image-prior/results/Brain1/AAAAAANets/*
+deep-image-prior/Exp*.sh
