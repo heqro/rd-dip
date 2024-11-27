@@ -67,8 +67,8 @@ full_table_data = load_full_table(json_files, JSON_DIRECTORY)
 
 
 df = load_tiered_table_columns(FIDELITIES, REGULARIZERS, json_files, JSON_DIRECTORY)
-df["lda"] = COEFS
-df = df[["lda"] + [col for col in df.columns if col != "lda"]]
+df["Λ"] = COEFS
+df = df[["Λ"] + [col for col in df.columns if col != "Λ"]]
 
 
 # Function to style cells
@@ -114,7 +114,15 @@ app.layout = html.Div(
                 html.H3("Tiered table"),
                 DataTable(
                     id="tiered-table",
-                    columns=[{"name": col, "id": col} for col in df.columns],
+                    columns=[
+                        {
+                            "name": "".join([c for c in col if not c.islower()]),
+                            "id": col,
+                            "type": "numeric",
+                            "format": {"specifier": ".2f"},
+                        }
+                        for col in df.columns
+                    ],
                     data=df.to_dict("records"),  # Convert DataFrame to dict
                     style_data_conditional=cell_styles,  # Apply styles
                     style_table={"overflowX": "auto"},
@@ -124,7 +132,13 @@ app.layout = html.Div(
                 DataTable(
                     id="summary-table",
                     columns=[
-                        {"name": col, "id": col} for col in full_table_data[0].keys()
+                        {
+                            "name": col,
+                            "id": col,
+                            "type": "numeric",
+                            "format": {"specifier": ".2f"},
+                        }
+                        for col in full_table_data[0].keys()
                     ],
                     data=full_table_data,  # Fixed data
                     style_table={"overflowX": "auto"},
@@ -233,7 +247,7 @@ def update_plot(selected_files):
                     x=iterations,
                     y=data["loss_log"]["addends"][addend]["values"],
                     mode="lines",
-                    name=f'{data["loss_log"]["addends"][addend]['coefficient']}·{addend}',
+                    name=f'{data["loss_log"]["addends"][addend]["coefficient"]}·{addend}',
                     line=dict(color=color),
                     showlegend=False,
                 ),
