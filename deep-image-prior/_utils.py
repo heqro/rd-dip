@@ -22,7 +22,7 @@ def load_gray_image(path: str, is_mask=False):
 
 
 def load_serialized_image(path: str, is_mask=False, normalize=True) -> Tensor:
-    img = torch.load(path).to(dtype=torch.float32)
+    img = torch.load(path, weights_only=False).to(dtype=torch.float32)
     if is_mask:
         img[img > 0] = img.max()
     if normalize:
