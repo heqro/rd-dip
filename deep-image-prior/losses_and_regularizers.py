@@ -108,14 +108,7 @@ class Rician_Norm_Unstable(FidelityTerm):
         r = i1(prediction * target / self.std**2) / i0(
             prediction * target / self.std**2
         )
-        return (
-            (
-                (prediction - r * target)
-                / (self.std**2 * prediction.shape[1] * prediction.shape[2])
-            )
-            .square()
-            .mean()
-        )
+        return (prediction - r * target).square().mean()
 
     def get_mask(self):
         raise NotImplementedError("Not implemented yet")
@@ -129,14 +122,7 @@ class Rician_Norm(FidelityTerm):
         r_inv = i0(prediction * target / self.std**2) / i1(
             prediction * target / self.std**2
         )
-        return (
-            (
-                (prediction * r_inv - target)
-                / (self.std**2 * prediction.shape[1] * prediction.shape[2])
-            )
-            .square()
-            .mean()
-        )
+        return (prediction * r_inv - target).square().mean()
 
     def get_mask(self):
         raise NotImplementedError("Not implemented yet")
