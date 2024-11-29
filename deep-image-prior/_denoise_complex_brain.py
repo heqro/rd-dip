@@ -1,26 +1,59 @@
+from typing import Literal
 from piqa import PSNR, SSIM
 import torch
 import _utils
 import numpy as np
 from losses_and_regularizers import *
-from dip_denoise import denoise
+from dip_denoise import Problem, ProblemImages, solve
 from models import *
 import argparse
 import json
 import sys
 
-is_debugging = False
+
+is_debugging = True
 if is_debugging:
     sys.argv += [
+        "--index",
+        "1",
+        "--noise_std",
+        "0.15",
+        "--fidelities",
+        "Rician_Norm:1.0:0.15",
         "--tag",
-        "Test",
+        "Retry_AttentiveUNet_Std0.15_Rician_Norm_itRician_0.05_lr1e-4",
+        "--max_its",
+        "50",
+        "--dip_noise_type",
+        "Rician",
+        "--dip_noise_std",
+        "0.05",
         "--model",
         "AttentiveUNet",
+        "--lr",
+        "1e-4",
     ]
 
-dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+dev = (
+    torch.device("cuda")
+    if torch.cuda.is_available() and not is_debugging
+    else torch.device("cpu")
+)
 psnr = PSNR()
 ssim = SSIM(n_channels=1).to(dev)
+
+
+def get_dip_noise_fn(noise_type: Literal["", "Gaussian", "Rician"]):
+    if noise_type == "Rician":
+        return _utils.add_rician_noise
+    if noise_type == "Gaussian":
+        return _utils.add_gaussian_noise
+
+    def id(x: Tensor):
+        return x
+
+    return id
 
 
 def load_experiment_data(
@@ -69,12 +102,6 @@ parser.add_argument(
     default="0.15",
 )
 parser.add_argument(
-    "--contaminate_with_Rician_noise",
-    action=argparse.BooleanOptionalAction,
-    default=False,
-    help="Whether or not we contaminate with Rician noise for each DIP iteration. Defaults to False.",
-)
-parser.add_argument(
     "--fidelities",
     type=str,
     nargs="+",
@@ -83,8 +110,8 @@ parser.add_argument(
         "'LossName:weight:param1:param2...'. Example: 'Gaussian:1.0', 'Rician:0.5:0.1'"
     ),
     default=[
-        "Rician:0.5:0.15",
-        "Gaussian:0.1",
+        # "Rician:0.5:0.15",
+        "Gaussian:1.0",
     ],  # TODO blows up for 0.10 in Rician term?
     required=not is_debugging,
 )
@@ -107,7 +134,13 @@ parser.add_argument(
         "The tag for the experiment. It should reflect the characteristics of it for finding it easily along other results. An idea is Std$std_$Fidelities_$Regularizers"
     ),
 )
+parser.add_argument(
+    "--dip_noise_type", choices=["Gaussian", "Rician", ""], default="Gaussian"
+)
+parser.add_argument("--max_its", type=int)
+parser.add_argument("--dip_noise_std", type=float, default=0.15)
 parser.add_argument("--model", type=str, required=not is_debugging)
+parser.add_argument("--lr", type=float, default=1e-2)
 
 
 # ⌨️
@@ -117,33 +150,42 @@ model = globals().get(args.model)
 if model is None:
     print(f"Model {args.model} not found")
     quit(-1)
+
 model = model()  # initialize model with default parameters
 idx = args.index
 std = args.noise_std
-contaminate_with_Rician = args.contaminate_with_Rician_noise
 composite_loss = load_experiment_config(args.fidelities, args.regularizers)
-# 🖼️
 noisy_gt_cpu, gt_cpu, mask_cpu = load_experiment_data(brain_idx=idx, noise_std=std)
-mask_size = (mask_cpu > 0).sum().item()
-gt_gpu = gt_cpu[None, ...].to(dev)
-mask_gpu = mask_cpu.to(dev)
-noisy_gt_gpu = noisy_gt_cpu[None, ...].to(dev)
 
-shared_data = {
-    "gt_gpu": gt_gpu,
-    "noisy_gt_gpu": noisy_gt_gpu,
-    "mask_gpu": mask_gpu,
-    "idx": idx,
-    "std": float(std),
+images = ProblemImages(
+    ground_truth=gt_cpu[None, ...],
+    noisy_image=noisy_gt_cpu[None, ...],
+    mask=mask_cpu[None, ...],
+    rician_noise_std=float(std),
+).to(dev)
+
+p: Problem = {
+    "images": images,
+    "psnr": psnr,
+    "ssim": ssim,
+    "max_its": args.max_its,
+    "tag": args.tag,
     "model": model,
+    "optimizer": torch.optim.Adam(model.parameters(), lr=args.lr),
+    "loss_config": composite_loss,
+    "dip_config": {
+        "noise_fn": get_dip_noise_fn(args.dip_noise_type),
+        "std": args.dip_noise_std,
+    },
 }
-report, best_img = denoise(
-    composite_loss, shared_data, contaminate_with_Gaussian=not contaminate_with_Rician
-)
+
+report, best_img = solve(p)
+
 
 _utils.print_image(
-    best_img, f"results/Brain{shared_data['idx']}/denoised_images/{args.tag}.png"
+    ((best_img * images.mask).squeeze().cpu().detach().numpy() * 255).astype(np.uint8),
+    f"results/Brain{args.index}/denoised_images/{args.tag}.png",
 )
 
-with open(f"results/Brain{shared_data['idx']}/jsons/{args.tag}.json", "w") as json_file:
+with open(f"results/Brain{args.index}/jsons/{args.tag}.json", "w") as json_file:
     json.dump(report, json_file, indent=4)

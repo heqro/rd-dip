@@ -1,12 +1,11 @@
 from losses_and_regularizers import CompositeLoss
 import torch
 import numpy as np
-from models import UNet as Model
 import _utils
 from piqa import PSNR, SSIM
 from torch.nn.functional import mse_loss as MSE
-from torch import Tensor
-from typing import Tuple, TypedDict
+from torch import Tensor, nn
+from typing import Callable, Literal, Tuple, TypedDict
 
 
 class StoppingCriteria(TypedDict):
@@ -25,120 +24,160 @@ class LossLog(TypedDict):
     addends: dict[str, LossAddend]
 
 
+class DIP_Report(TypedDict):
+    it_noise_type: Literal["", "Rician", "Gaussian"]
+    it_noise_std: float
+
+
 class ExperimentReport(TypedDict):
     # Fields for results
     psnr_entire_image_log: list[float]
     psnr_mask_log: list[float]
     ssim_mask_log: list[float]
+    ssim_entire_image_log: list[float]
+    image_noise_std: float
     stopping_criteria_indices: StoppingCriteria
     loss_log: LossLog
     # Data of the experiment
-    contaminate_with_Gaussian: bool
+    dip_config: DIP_Report
+
+
+class ProblemImages(torch.nn.Module):
+
+    def __init__(
+        self,
+        ground_truth: Tensor,
+        noisy_image: Tensor,
+        mask: Tensor,
+        rician_noise_std: float,
+    ):
+        super().__init__()
+        self.ground_truth = nn.Parameter(ground_truth, requires_grad=False)
+        self.noisy_image = nn.Parameter(noisy_image, requires_grad=False)
+        self.mask = nn.Parameter(mask, requires_grad=False)
+        self.rician_noise_std = rician_noise_std
+
+
+class DIP(TypedDict):
+    noise_fn: Callable[..., Tensor]
     std: float
 
 
+class Problem(TypedDict):
+    tag: str
+    images: ProblemImages
+    model: torch.nn.Module
+    optimizer: torch.optim.Optimizer
+    loss_config: CompositeLoss
+    dip_config: DIP
+    max_its: int
+    psnr: PSNR
+    ssim: SSIM
+
+
 def initialize_experiment_report(
-    contaminate_with_Gaussian: bool, std: float
+    dip_config: DIP, rician_noise_std: float
 ) -> ExperimentReport:
+    aux = ""
+    if dip_config["noise_fn"] == _utils.add_rician_noise:
+        aux = "Rician"
+    if dip_config["noise_fn"] == _utils.add_gaussian_noise:
+        aux = "Gaussian"
+
     return {
-        "contaminate_with_Gaussian": contaminate_with_Gaussian,
+        "dip_config": {"it_noise_type": aux, "it_noise_std": dip_config["std"]},
+        "image_noise_std": rician_noise_std,
         "loss_log": {"overall_loss": [], "addends": {}},
         "psnr_entire_image_log": [],
         "psnr_mask_log": [],
         "ssim_mask_log": [],
-        "std": std,
+        "ssim_entire_image_log": [],
         "stopping_criteria_indices": {"entire_image_idx": None, "mask_idx": None},
     }
 
 
-def denoise(
-    loss_config: CompositeLoss, shared_data: dict, contaminate_with_Gaussian=True
-) -> Tuple[ExperimentReport, np.ndarray]:
-    def stopping_criterion(prediction: Tensor, noisy_img: Tensor, std: float):
-        return MSE(prediction, noisy_img) < std**2
+def stopping_criterion(prediction: Tensor, noisy_img: Tensor, std: float):
+    return MSE(prediction, noisy_img) < std**2
 
-    def stopping_criterion_mask(
-        prediction: Tensor, noisy_img: Tensor, mask: Tensor, std: float
-    ):
-        omega = (mask > 0).sum().item()
-        prediction = prediction * mask
-        noisy_img = noisy_img * mask
-        return ((prediction - noisy_img) * mask).square().sum() / omega < std**2
 
-    experiment_report = initialize_experiment_report(
-        contaminate_with_Gaussian=contaminate_with_Gaussian, std=shared_data["std"]
-    )
-    dev = shared_data["gt_gpu"].device
-    psnr = PSNR()
-    ssim = SSIM(n_channels=1).to(dev)
-    model = shared_data["model"].to(dev)
-    seed_cpu = torch.from_numpy(
-        np.random.uniform(
-            0,
-            0.1,
-            size=(3, shared_data["gt_gpu"].shape[-2], shared_data["gt_gpu"].shape[-1]),
-        ).astype("float32")
-    )[None, :]
-    seed_gpu = seed_cpu.to(dev)
-    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
+def stopping_criterion_mask(
+    prediction: Tensor, noisy_img: Tensor, mask: Tensor, std: float
+):
+    omega = (mask > 0).sum().item()
+    prediction = prediction * mask
+    noisy_img = noisy_img * mask
+    return ((prediction - noisy_img) * mask).square().sum() / omega < std**2
 
-    # 🪵🪵
-    best_psnr = -np.inf
-    best_img = shared_data["noisy_gt_gpu"]
-    reached_stopping_criterion = reached_stopping_criterion_mask = False
 
-    for it in range(10000):
-        opt.zero_grad()
-        noisy_seed_dev = (
-            _utils.add_gaussian_noise(seed_gpu, avg=0, std=0.05)
-            if contaminate_with_Gaussian
-            else _utils.add_rician_noise(seed_gpu, std=0.15)
-        )
-        prediction = model.forward(noisy_seed_dev).clip(0, 1)
-        if prediction.isnan().any():
-            print("ERR: model.forward() returned NANs")
-        loss = loss_config.evaluate_losses(prediction[0], shared_data["noisy_gt_gpu"])
+def update_report_quality_metrics(
+    experiment_report: ExperimentReport,
+    it: int,
+    prediction: Tensor,
+    p: Problem,
+    best_psnr: float,
+    reached_stopping_criterion: bool,
+    reached_stopping_criterion_mask: bool,
+    bounding_box: tuple[tuple[int, int], tuple[int, int]],
+    best_img: Tensor,
+):
+    # Update PSNR
+    experiment_report["psnr_entire_image_log"] += [
+        p["psnr"](prediction[0], p["images"].ground_truth).item()
+    ]
+    it_psnr_mask = _utils.psnr_with_mask(
+        prediction[0], p["images"].ground_truth, p["images"].mask
+    ).item()
+    experiment_report["psnr_mask_log"] += [it_psnr_mask]
 
-        # 🪵
-        experiment_report["psnr_entire_image_log"] += [
-            psnr(prediction[0], shared_data["gt_gpu"]).item()
-        ]
-        experiment_report["ssim_mask_log"] += [
-            ssim(
-                (prediction[0] * shared_data["mask_gpu"]).permute(1, 0, 2),
-                (shared_data["gt_gpu"] * shared_data["mask_gpu"]).permute(1, 0, 2),
-            ).item()
-        ]
-        it_psnr_mask = _utils.psnr_with_mask(
-            prediction[0], shared_data["gt_gpu"], shared_data["mask_gpu"]
+    if best_psnr < it_psnr_mask:
+        best_psnr = it_psnr_mask
+        best_img = prediction
+
+    # Update SSIM
+    experiment_report["ssim_entire_image_log"] += [
+        p["ssim"](
+            prediction[0].permute(1, 0, 2),
+            p["images"].ground_truth.permute(1, 0, 2),
         ).item()
-        experiment_report["psnr_mask_log"] += [it_psnr_mask]
+    ]
+    experiment_report["ssim_mask_log"] += [
+        p["ssim"](
+            (prediction[0] * p["images"].mask[0])[
+                ...,
+                bounding_box[0][0] : bounding_box[1][0],
+                bounding_box[0][1] : bounding_box[1][1],
+            ].permute(1, 0, 2),
+            (p["images"].ground_truth * p["images"].mask[0])[
+                ...,
+                bounding_box[0][0] : bounding_box[1][0],
+                bounding_box[0][1] : bounding_box[1][1],
+            ].permute(1, 0, 2),
+        ).item()
+    ]
 
-        if best_psnr < it_psnr_mask:
-            best_psnr = it_psnr_mask
-            best_img = prediction
-        if not reached_stopping_criterion:
-            if stopping_criterion(
-                prediction[0], shared_data["noisy_gt_gpu"], shared_data["std"]
-            ):
-                reached_stopping_criterion = True
-                experiment_report["stopping_criteria_indices"]["entire_image_idx"] = it
-        if not reached_stopping_criterion_mask:
-            if stopping_criterion_mask(
-                prediction[0],
-                shared_data["noisy_gt_gpu"],
-                shared_data["mask_gpu"],
-                shared_data["std"],
-            ):
-                reached_stopping_criterion_mask = True
-                experiment_report["stopping_criteria_indices"]["mask_idx"] = it
-        loss.backward()
-        opt.step()
+    # Verify stopping criterions
+    if not reached_stopping_criterion:
+        if stopping_criterion(
+            prediction[0], p["images"].noisy_image, p["images"].rician_noise_std
+        ):
+            reached_stopping_criterion = True
+            experiment_report["stopping_criteria_indices"]["entire_image_idx"] = it
+    if not reached_stopping_criterion_mask:
+        if stopping_criterion_mask(
+            prediction[0],
+            p["images"].noisy_image,
+            p["images"].mask,
+            p["images"].rician_noise_std,
+        ):
+            reached_stopping_criterion_mask = True
+            experiment_report["stopping_criteria_indices"]["mask_idx"] = it
 
-    best_img = (
-        (best_img * shared_data["mask_gpu"]).squeeze().cpu().detach().numpy() * 255
-    ).astype(np.uint8)
+    return best_psnr, best_img
 
+
+def update_report_losses(
+    experiment_report: ExperimentReport, loss_config: CompositeLoss
+):
     experiment_report["loss_log"]["overall_loss"] = loss_config.total_loss_log
     for fid_fn, lambda_loss in loss_config.config["fidelities"]:
         experiment_report["loss_log"]["addends"][fid_fn.__class__.__name__] = {
@@ -150,4 +189,45 @@ def denoise(
             "coefficient": lambda_loss,
             "values": loss_config.reg_loss_log[reg_fn.__class__.__name__],
         }
+
+
+def solve(p: Problem) -> Tuple[ExperimentReport, Tensor]:
+
+    experiment_report = initialize_experiment_report(
+        dip_config=p["dip_config"], rician_noise_std=p["images"].rician_noise_std
+    )
+    model = p["model"]
+    seed = 0.1 * torch.rand(
+        1, 3, p["images"].mask.shape[-2], p["images"].mask.shape[-1]
+    ).to(p["images"].noisy_image.device)
+
+    # 🪵🪵
+    best_psnr = -np.inf
+    best_img = p["images"].noisy_image
+    reached_stopping_criterion = reached_stopping_criterion_mask = False
+    bounding_box = _utils.get_bounding_box(p["images"].mask)
+
+    for it in range(p["max_its"]):
+        p["optimizer"].zero_grad()
+        noisy_seed = p["dip_config"]["noise_fn"](seed, std=p["dip_config"]["std"])
+        prediction = model.forward(noisy_seed).clip(0, 1)
+
+        if prediction.isnan().any():
+            print("ERR: model.forward() returned NANs")
+
+        loss = p["loss_config"].evaluate_losses(prediction[0], p["images"].noisy_image)
+        best_psnr, best_img = update_report_quality_metrics(
+            experiment_report,
+            it,
+            prediction,
+            p,
+            best_psnr,
+            reached_stopping_criterion,
+            reached_stopping_criterion_mask,
+            bounding_box,
+            best_img,
+        )
+        loss.backward()
+        p["optimizer"].step()
+    update_report_losses(experiment_report, p["loss_config"])
     return experiment_report, best_img
