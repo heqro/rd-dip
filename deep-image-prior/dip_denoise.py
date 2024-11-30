@@ -27,18 +27,28 @@ class LossLog(TypedDict):
 class DIP_Report(TypedDict):
     it_noise_type: Literal["", "Rician", "Gaussian"]
     it_noise_std: float
+    net_architecture: str
+
+
+class OptimizerProfile(TypedDict):
+    name: str
+    lr: list[float]
 
 
 class ExperimentReport(TypedDict):
     # Fields for results
+    exit_code: int
+    name: str
     psnr_entire_image_log: list[float]
     psnr_mask_log: list[float]
     ssim_mask_log: list[float]
     ssim_entire_image_log: list[float]
-    image_noise_std: float
-    stopping_criteria_indices: StoppingCriteria
     loss_log: LossLog
-    # Data of the experiment
+    stopping_criteria_indices: StoppingCriteria
+    optimizer: OptimizerProfile
+    # Fields for the image
+    image_noise_std: float
+    # DIP data
     dip_config: DIP_Report
 
 
@@ -61,12 +71,13 @@ class ProblemImages(torch.nn.Module):
 class DIP(TypedDict):
     noise_fn: Callable[..., Tensor]
     std: float
+    model: nn.Module
 
 
 class Problem(TypedDict):
+    image_name: str
     tag: str
     images: ProblemImages
-    model: torch.nn.Module
     optimizer: torch.optim.Optimizer
     loss_config: CompositeLoss
     dip_config: DIP
@@ -75,24 +86,31 @@ class Problem(TypedDict):
     ssim: SSIM
 
 
-def initialize_experiment_report(
-    dip_config: DIP, rician_noise_std: float
-) -> ExperimentReport:
+def initialize_experiment_report(p: Problem) -> ExperimentReport:
     aux = ""
-    if dip_config["noise_fn"] == _utils.add_rician_noise:
+    if p["dip_config"]["noise_fn"] == _utils.add_rician_noise:
         aux = "Rician"
-    if dip_config["noise_fn"] == _utils.add_gaussian_noise:
+    if p["dip_config"]["noise_fn"] == _utils.add_gaussian_noise:
         aux = "Gaussian"
-
     return {
-        "dip_config": {"it_noise_type": aux, "it_noise_std": dip_config["std"]},
-        "image_noise_std": rician_noise_std,
+        "exit_code": 0,
+        "name": p["image_name"],
+        "dip_config": {
+            "it_noise_type": aux,
+            "it_noise_std": p["dip_config"]["std"],
+            "net_architecture": p["dip_config"]["model"]._get_name(),
+        },
+        "image_noise_std": p["images"].rician_noise_std,
         "loss_log": {"overall_loss": [], "addends": {}},
         "psnr_entire_image_log": [],
         "psnr_mask_log": [],
         "ssim_mask_log": [],
         "ssim_entire_image_log": [],
         "stopping_criteria_indices": {"entire_image_idx": None, "mask_idx": None},
+        "optimizer": {
+            "lr": [p["optimizer"].param_groups[-1]["lr"]],
+            "name": type(p["optimizer"]).__name__,
+        },
     }
 
 
@@ -193,12 +211,13 @@ def update_report_losses(
 
 def solve(p: Problem) -> Tuple[ExperimentReport, Tensor]:
 
-    experiment_report = initialize_experiment_report(
-        dip_config=p["dip_config"], rician_noise_std=p["images"].rician_noise_std
-    )
-    model = p["model"]
+    experiment_report = initialize_experiment_report(p)
+    model = p["dip_config"]["model"]
     seed = 0.1 * torch.rand(
-        1, 3, p["images"].mask.shape[-2], p["images"].mask.shape[-1]
+        1,
+        3,
+        p["images"].mask.shape[-2],
+        p["images"].mask.shape[-1],
     ).to(p["images"].noisy_image.device)
 
     # 🪵🪵
@@ -213,7 +232,9 @@ def solve(p: Problem) -> Tuple[ExperimentReport, Tensor]:
         prediction = model.forward(noisy_seed).clip(0, 1)
 
         if prediction.isnan().any():
-            print("ERR: model.forward() returned NANs")
+            print("ERR: model.forward() returned NANs. Terminating prematurely.")
+            experiment_report["exit_code"] = -1
+            break
 
         loss = p["loss_config"].evaluate_losses(prediction[0], p["images"].noisy_image)
         best_psnr, best_img = update_report_quality_metrics(
