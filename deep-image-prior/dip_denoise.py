@@ -237,6 +237,12 @@ def solve(p: Problem) -> Tuple[ExperimentReport, Tensor]:
             break
 
         loss = p["loss_config"].evaluate_losses(prediction[0], p["images"].noisy_image)
+
+        if loss.isnan():
+            print("ERR: loss is NAN. Terminating prematurely.")
+            experiment_report["exit_code"] = -1
+            break
+
         best_psnr, best_img = update_report_quality_metrics(
             experiment_report,
             it,
