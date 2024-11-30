@@ -5,13 +5,14 @@ import _utils
 import numpy as np
 from losses_and_regularizers import *
 from dip_denoise import Problem, ProblemImages, solve
+from skimage.metrics import structural_similarity as ssim_sk
 from models import *
 import argparse
 import json
 import sys
 
 
-is_debugging = True
+is_debugging = False
 if is_debugging:
     sys.argv += [
         "--index",
@@ -21,23 +22,23 @@ if is_debugging:
         "--fidelities",
         "Rician_Norm:1.0:0.15",
         "--tag",
-        "Retry_AttentiveUNet_Std0.15_Rician_Norm_itRician_0.05_lr1e-4",
+        "MultiAttentionNet_Std0.15_Rician_Norm_itRician_0.05_lr1e-3",
         "--max_its",
-        "50",
+        "30000",
         "--dip_noise_type",
         "Rician",
         "--dip_noise_std",
         "0.05",
         "--model",
-        "AttentiveUNet",
+        "MultiAttentionNet",
         "--lr",
-        "1e-4",
+        "1e-3",
     ]
 
 
 dev = (
     torch.device("cuda")
-    if torch.cuda.is_available() and not is_debugging
+    if torch.cuda.is_available()  # and not is_debugging
     else torch.device("cpu")
 )
 psnr = PSNR()
@@ -151,7 +152,7 @@ if model is None:
     print(f"Model {args.model} not found")
     quit(-1)
 
-model = model()  # initialize model with default parameters
+model = model().to(dev)  # initialize model with default parameters
 idx = args.index
 std = args.noise_std
 composite_loss = load_experiment_config(args.fidelities, args.regularizers)
@@ -170,13 +171,14 @@ p: Problem = {
     "ssim": ssim,
     "max_its": args.max_its,
     "tag": args.tag,
-    "model": model,
     "optimizer": torch.optim.Adam(model.parameters(), lr=args.lr),
     "loss_config": composite_loss,
     "dip_config": {
         "noise_fn": get_dip_noise_fn(args.dip_noise_type),
         "std": args.dip_noise_std,
+        "model": model,
     },
+    "image_name": f"Brain{args.index}",
 }
 
 report, best_img = solve(p)
@@ -185,6 +187,20 @@ report, best_img = solve(p)
 _utils.print_image(
     ((best_img * images.mask).squeeze().cpu().detach().numpy() * 255).astype(np.uint8),
     f"results/Brain{args.index}/denoised_images/{args.tag}.png",
+)
+
+
+images = images.cpu()
+_, img_ssim = ssim_sk(
+    images.ground_truth.numpy(),
+    best_img[0].cpu().detach().numpy(),
+    data_range=1.0,
+    channel_axis=0,
+    full=True,
+)
+_utils.print_image(
+    (img_ssim[0].clip(0, 1) * 255).astype(np.uint8),
+    f"results/Brain{args.index}/ssim_images/{args.tag}.png",
 )
 
 with open(f"results/Brain{args.index}/jsons/{args.tag}.json", "w") as json_file:
