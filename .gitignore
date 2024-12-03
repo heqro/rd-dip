@@ -37,3 +37,6 @@ deep-image-prior/_test.py
 deep-image-prior/rename.sh
 deep-image-prior/results/Brain1/AAAAAANets/*
 deep-image-prior/Exp*.sh
+deep-image-prior/results/*/test_denoised_images/*
+deep-image-prior/results/*/ssim_images/*
+deep-image-prior/results/*/test_jsons/*
