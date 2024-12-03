@@ -72,6 +72,7 @@ class DIP(TypedDict):
     noise_fn: Callable[..., Tensor]
     std: float
     model: nn.Module
+    seed: Tensor
 
 
 class Problem(TypedDict):
@@ -213,13 +214,8 @@ def solve(p: Problem) -> Tuple[ExperimentReport, Tensor]:
 
     experiment_report = initialize_experiment_report(p)
     model = p["dip_config"]["model"]
-    seed = 0.1 * torch.rand(
-        1,
-        3,
-        p["images"].mask.shape[-2],
-        p["images"].mask.shape[-1],
-    ).to(p["images"].noisy_image.device)
-
+    seed = p["dip_config"]["seed"]
+    std = p["dip_config"]["std"]
     # 🪵🪵
     best_psnr = -np.inf
     best_img = p["images"].noisy_image
