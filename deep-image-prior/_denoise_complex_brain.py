@@ -4,7 +4,7 @@ import torch
 import _utils
 import numpy as np
 from losses_and_regularizers import *
-from dip_denoise import Problem, ProblemImages, solve
+from dip_denoise import Problem, ProblemImages, solve, initialize_experiment_report
 from skimage.metrics import structural_similarity as ssim_sk
 from models import *
 import argparse
@@ -43,6 +43,28 @@ dev = (
 )
 psnr = PSNR()
 ssim = SSIM(n_channels=1).to(dev)
+
+
+def save_best_img(best_img: Tensor, it: str):
+    _utils.print_image(
+        (best_img.squeeze().cpu().detach().numpy() * 255).astype(np.uint8),
+        f"results/Brain{args.index}/test_denoised_images/{args.tag}{it}.png",
+    )
+
+
+def save_best_ssim(best_img: Tensor, ground_truth: Tensor, it: str):
+
+    _, img_ssim = ssim_sk(
+        ground_truth.cpu().numpy(),
+        best_img[0].cpu().detach().numpy(),
+        data_range=1.0,
+        channel_axis=0,
+        full=True,
+    )
+    _utils.print_image(
+        (img_ssim[0].clip(0, 1) * 255).astype(np.uint8),
+        f"results/Brain{args.index}/test_ssim_images/{args.tag}{it}.png",
+    )
 
 
 def get_dip_noise_fn(noise_type: Literal["", "Gaussian", "Rician"]):
@@ -165,11 +187,18 @@ images = ProblemImages(
     rician_noise_std=float(std),
 ).to(dev)
 
+seed = 0.1 * torch.rand(
+    1,
+    3,
+    images.mask.shape[-2],
+    images.mask.shape[-1],
+).to(images.noisy_image.device)
+
 p: Problem = {
     "images": images,
     "psnr": psnr,
     "ssim": ssim,
-    "max_its": args.max_its,
+    "max_its": args.max_its // 1000,
     "tag": args.tag,
     "optimizer": torch.optim.Adam(model.parameters(), lr=args.lr),
     "loss_config": composite_loss,
@@ -177,31 +206,20 @@ p: Problem = {
         "noise_fn": get_dip_noise_fn(args.dip_noise_type),
         "std": args.dip_noise_std,
         "model": model,
+        "seed": seed,
     },
     "image_name": f"Brain{args.index}",
 }
 
-report, best_img = solve(p)
+report = initialize_experiment_report(p)
 
+for it in range(1, 3000):  # take 3000 'best images'
+    report, best_img = solve(p, report)
+    save_best_img(best_img, str(it * p["max_its"]))
+    save_best_ssim(best_img, images.ground_truth, str(it * p["max_its"]))
+    if report["exit_code"] != 0:
+        break
 
-_utils.print_image(
-    ((best_img * images.mask).squeeze().cpu().detach().numpy() * 255).astype(np.uint8),
-    f"results/Brain{args.index}/denoised_images/{args.tag}.png",
-)
-
-
-images = images.cpu()
-_, img_ssim = ssim_sk(
-    images.ground_truth.numpy(),
-    best_img[0].cpu().detach().numpy(),
-    data_range=1.0,
-    channel_axis=0,
-    full=True,
-)
-_utils.print_image(
-    (img_ssim[0].clip(0, 1) * 255).astype(np.uint8),
-    f"results/Brain{args.index}/ssim_images/{args.tag}.png",
-)
 
 with open(f"results/Brain{args.index}/jsons/{args.tag}.json", "w") as json_file:
     json.dump(report, json_file, indent=4)

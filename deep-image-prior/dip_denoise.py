@@ -129,67 +129,66 @@ def stopping_criterion_mask(
 
 
 def update_report_quality_metrics(
-    experiment_report: ExperimentReport,
+    report: ExperimentReport,
     it: int,
     prediction: Tensor,
     p: Problem,
     best_psnr: float,
-    reached_stopping_criterion: bool,
-    reached_stopping_criterion_mask: bool,
-    bounding_box: tuple[tuple[int, int], tuple[int, int]],
+    bbox: tuple[tuple[int, int], tuple[int, int]],
     best_img: Tensor,
 ):
     # Update PSNR
-    experiment_report["psnr_entire_image_log"] += [
+    report["psnr_entire_image_log"] += [
         p["psnr"](prediction[0], p["images"].ground_truth).item()
     ]
     it_psnr_mask = _utils.psnr_with_mask(
         prediction[0], p["images"].ground_truth, p["images"].mask
     ).item()
-    experiment_report["psnr_mask_log"] += [it_psnr_mask]
+    report["psnr_mask_log"] += [it_psnr_mask]
 
     if best_psnr < it_psnr_mask:
         best_psnr = it_psnr_mask
         best_img = prediction
 
     # Update SSIM
-    experiment_report["ssim_entire_image_log"] += [
+    report["ssim_entire_image_log"] += [
         p["ssim"](
             prediction[0].permute(1, 0, 2),
             p["images"].ground_truth.permute(1, 0, 2),
         ).item()
     ]
-    experiment_report["ssim_mask_log"] += [
+    report["ssim_mask_log"] += [
         p["ssim"](
             (prediction[0] * p["images"].mask[0])[
                 ...,
-                bounding_box[0][0] : bounding_box[1][0],
-                bounding_box[0][1] : bounding_box[1][1],
+                bbox[0][0] : bbox[1][0],
+                bbox[0][1] : bbox[1][1],
             ].permute(1, 0, 2),
             (p["images"].ground_truth * p["images"].mask[0])[
                 ...,
-                bounding_box[0][0] : bounding_box[1][0],
-                bounding_box[0][1] : bounding_box[1][1],
+                bbox[0][0] : bbox[1][0],
+                bbox[0][1] : bbox[1][1],
             ].permute(1, 0, 2),
         ).item()
     ]
 
     # Verify stopping criterions
-    if not reached_stopping_criterion:
-        if stopping_criterion(
-            prediction[0], p["images"].noisy_image, p["images"].rician_noise_std
-        ):
-            reached_stopping_criterion = True
-            experiment_report["stopping_criteria_indices"]["entire_image_idx"] = it
-    if not reached_stopping_criterion_mask:
-        if stopping_criterion_mask(
-            prediction[0],
-            p["images"].noisy_image,
-            p["images"].mask,
-            p["images"].rician_noise_std,
-        ):
-            reached_stopping_criterion_mask = True
-            experiment_report["stopping_criteria_indices"]["mask_idx"] = it
+    if report["stopping_criteria_indices"][
+        "entire_image_idx"
+    ] is None and stopping_criterion(
+        prediction[0], p["images"].noisy_image, p["images"].rician_noise_std
+    ):
+        report["stopping_criteria_indices"]["entire_image_idx"] = it
+
+    if report["stopping_criteria_indices"][
+        "mask_idx"
+    ] is None and stopping_criterion_mask(
+        prediction[0],
+        p["images"].noisy_image,
+        p["images"].mask,
+        p["images"].rician_noise_std,
+    ):
+        report["stopping_criteria_indices"]["mask_idx"] = it
 
     return best_psnr, best_img
 
@@ -210,21 +209,21 @@ def update_report_losses(
         }
 
 
-def solve(p: Problem) -> Tuple[ExperimentReport, Tensor]:
+def solve(
+    p: Problem, experiment_report: ExperimentReport
+) -> Tuple[ExperimentReport, Tensor]:
 
-    experiment_report = initialize_experiment_report(p)
     model = p["dip_config"]["model"]
     seed = p["dip_config"]["seed"]
     std = p["dip_config"]["std"]
     # 🪵🪵
     best_psnr = -np.inf
     best_img = p["images"].noisy_image
-    reached_stopping_criterion = reached_stopping_criterion_mask = False
     bounding_box = _utils.get_bounding_box(p["images"].mask)
 
     for it in range(p["max_its"]):
         p["optimizer"].zero_grad()
-        noisy_seed = p["dip_config"]["noise_fn"](seed, std=p["dip_config"]["std"])
+        noisy_seed = p["dip_config"]["noise_fn"](seed, std=std)
         prediction = model.forward(noisy_seed).clip(0, 1)
 
         if prediction.isnan().any():
@@ -245,8 +244,6 @@ def solve(p: Problem) -> Tuple[ExperimentReport, Tensor]:
             prediction,
             p,
             best_psnr,
-            reached_stopping_criterion,
-            reached_stopping_criterion_mask,
             bounding_box,
             best_img,
         )
