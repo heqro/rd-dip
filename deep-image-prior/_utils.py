@@ -30,6 +30,19 @@ def load_serialized_image(path: str, is_mask=False, normalize=True) -> Tensor:
     return img
 
 
+def get_bounding_box(mask: Tensor) -> tuple[tuple[int, int], tuple[int, int]]:
+    indices = torch.nonzero(mask, as_tuple=True)
+    top_left = (
+        int(indices[-2].min().item()),
+        int(indices[-1].min().item()),
+    )  # (min_row, min_col)
+    bottom_right = (
+        int(indices[-2].max().item()),
+        int(indices[-1].max().item()),
+    )  # (max_row, max_col)
+    return top_left, bottom_right
+
+
 def crop_image(img, d=32):
     new_height = img.shape[-2] - img.shape[-2] % d
     new_width = img.shape[-1] - img.shape[-1] % d
