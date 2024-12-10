@@ -36,7 +36,14 @@ deep-image-prior/.complex_test_data/Denoising Results.txt
 deep-image-prior/_test.py
 deep-image-prior/rename.sh
 deep-image-prior/results/Brain1/AAAAAANets/*
-deep-image-prior/Exp*.sh
+deep-image-prior/*.sh
 deep-image-prior/results/*/test_denoised_images/*
 deep-image-prior/results/*/ssim_images/*
+deep-image-prior/results/*/test_ssim_images/*
 deep-image-prior/results/*/test_jsons/*
+deep-image-prior/results/Brain1/rician_jsons/*
+deep-image-prior/results/Brain1/rician_ssim_images/*
+deep-image-prior/results/Brain1/rician_test_denoised/*
+deep-image-prior/results/Brain1/def_denoised/*
+deep-image-prior/results/Brain1/def_ssim/*
+deep-image-prior/results/Brain1/def_jsons/*
