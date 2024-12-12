@@ -47,3 +47,4 @@ deep-image-prior/results/Brain1/rician_test_denoised/*
 deep-image-prior/results/Brain1/def_denoised/*
 deep-image-prior/results/Brain1/def_ssim/*
 deep-image-prior/results/Brain1/def_jsons/*
+.results_server/__pycache__/*
