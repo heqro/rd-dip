@@ -80,6 +80,17 @@ for index, row in df.iterrows():
 app.layout = html.Div(
     [
         html.H1("Experiment Data Comparison"),
+        html.Label("Select Experiment Directory:"),
+        dcc.Dropdown(
+            id="dir-selector",
+            options=[
+                {"label": dir, "value": dir}
+                for dir in os.listdir("../deep-image-prior/results")
+                if os.path.isdir(os.path.join("../deep-image-prior/results", dir))
+            ],
+            value="Brain1",  # Default directory
+            clearable=False,
+        ),
         html.Label("Select JSON files:"),
         dcc.Dropdown(
             id="json-selector",
@@ -150,6 +161,26 @@ def add_data_point(
         row=row,
         col=col,
     )
+
+
+@app.callback(
+    [
+        Output("json-selector", "options"),
+        Output("json-selector", "value"),
+        Output("summary-table", "data"),
+    ],
+    [Input("dir-selector", "value")],
+)
+def update_json_selector_and_table(selected_dir):
+    global EXPERIMENTS_DIR, df
+    EXPERIMENTS_DIR = f"../deep-image-prior/results/{selected_dir}"
+    df = pd.read_csv(f"{EXPERIMENTS_DIR}/summary.csv", sep=";")
+    json_files = [
+        {"label": f, "value": f}
+        for f in os.listdir(f"{EXPERIMENTS_DIR}/{JSONS_DIR}")
+        if f.endswith(".json")
+    ]
+    return json_files, [], df.to_dict("records")  # Update JSON options and table data
 
 
 # Callback for interactive updates
@@ -330,7 +361,7 @@ def update_plot(selected_files):
         html.Div(
             [
                 html.Img(
-                    src=f"assets/Brain1/Brain1.png",
+                    src=f"assets/{EXPERIMENTS_DIR.split('/')[-1]}/{EXPERIMENTS_DIR.split('/')[-1]}_gt.png",
                     style={"height": "256px", "border": "1px solid black"},
                 ),
                 html.P("Ground truth", style={"text-align": "center"}),
@@ -341,7 +372,7 @@ def update_plot(selected_files):
         html.Div(
             [
                 html.Img(
-                    src=f"assets/Brain1/Contaminated_Brain1_0.15.png",
+                    src=f"assets/{EXPERIMENTS_DIR.split('/')[-1]}/{EXPERIMENTS_DIR.split('/')[-1]}_Std0.15.png",
                     style={"height": "256px", "border": "1px solid black"},
                 ),
                 html.P("Noisy", style={"text-align": "center"}),
@@ -354,7 +385,7 @@ def update_plot(selected_files):
             html.Div(
                 [
                     html.Img(
-                        src=f"assets/Brain1/{image_name}",
+                        src=f"assets/{EXPERIMENTS_DIR.split('/')[-1]}/{image_name}",
                         style={"height": "256px", "border": "1px solid black"},
                     ),
                     html.P(
@@ -371,4 +402,4 @@ def update_plot(selected_files):
 
 # Run server
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8052)
+    app.run(debug=False, host="0.0.0.0", port=8052)
