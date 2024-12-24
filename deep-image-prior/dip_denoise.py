@@ -139,10 +139,10 @@ def update_report_quality_metrics(
 ):
     # Update PSNR
     report["psnr_entire_image_log"] += [
-        p["psnr"](prediction[0], p["images"].ground_truth).item()
+        p["psnr"](prediction, p["images"].ground_truth).item()
     ]
     it_psnr_mask = _utils.psnr_with_mask(
-        prediction[0], p["images"].ground_truth, p["images"].mask
+        prediction, p["images"].ground_truth, p["images"].mask
     ).item()
     report["psnr_mask_log"] += [it_psnr_mask]
 
@@ -153,22 +153,22 @@ def update_report_quality_metrics(
     # Update SSIM
     report["ssim_entire_image_log"] += [
         p["ssim"](
-            prediction[0].permute(1, 0, 2),
-            p["images"].ground_truth.permute(1, 0, 2),
+            prediction,
+            p["images"].ground_truth,
         ).item()
     ]
     report["ssim_mask_log"] += [
         p["ssim"](
-            (prediction[0] * p["images"].mask[0])[
+            (prediction * p["images"].mask)[
                 ...,
                 bbox[0][0] : bbox[1][0],
                 bbox[0][1] : bbox[1][1],
-            ].permute(1, 0, 2),
-            (p["images"].ground_truth * p["images"].mask[0])[
+            ],
+            (p["images"].ground_truth * p["images"].mask)[
                 ...,
                 bbox[0][0] : bbox[1][0],
                 bbox[0][1] : bbox[1][1],
-            ].permute(1, 0, 2),
+            ],
         ).item()
     ]
 
@@ -176,14 +176,14 @@ def update_report_quality_metrics(
     if report["stopping_criteria_indices"][
         "entire_image_idx"
     ] is None and stopping_criterion(
-        prediction[0], p["images"].noisy_image, p["images"].rician_noise_std
+        prediction, p["images"].noisy_image, p["images"].rician_noise_std
     ):
         report["stopping_criteria_indices"]["entire_image_idx"] = it
 
     if report["stopping_criteria_indices"][
         "mask_idx"
     ] is None and stopping_criterion_mask(
-        prediction[0],
+        prediction,
         p["images"].noisy_image,
         p["images"].mask,
         p["images"].rician_noise_std,
@@ -224,14 +224,16 @@ def solve(
     for it in range(p["max_its"]):
         p["optimizer"].zero_grad()
         noisy_seed = p["dip_config"]["noise_fn"](seed, std=std)
-        prediction = model.forward(noisy_seed).clip(0, 1)
+        prediction = (
+            model.forward(noisy_seed).clip(0, 1).mean(dim=0)[None, ...]
+        )  # mean is no-op when batch_size == 1
 
         if prediction.isnan().any():
             print("ERR: model.forward() returned NANs. Terminating prematurely.")
             experiment_report["exit_code"] = -1
             break
 
-        loss = p["loss_config"].evaluate_losses(prediction[0], p["images"].noisy_image)
+        loss = p["loss_config"].evaluate_losses(prediction, p["images"].noisy_image)
 
         if loss.isnan():
             print("ERR: loss is NAN. Terminating prematurely.")
