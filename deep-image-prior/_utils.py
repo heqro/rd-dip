@@ -4,6 +4,7 @@ from torch import Tensor
 import torchvision
 import numpy as np
 from numpy import ndarray
+import torch.nn.functional as F
 
 
 def __load_image__(path: str, mode: torchvision.io.ImageReadMode):
@@ -135,7 +136,7 @@ def psnr_with_mask(
         return 10 * np.log10(data_range**2 / mse)
 
 
-def grads(image: Tensor, direction="forward") -> Tuple[Tensor, Tensor]:
+def grads_old(image: Tensor, direction="forward") -> Tuple[Tensor, Tensor]:
     """Computes image gradients (dy/dx) for a given image."""
     channels, height, width = image.shape
 
@@ -176,8 +177,119 @@ def grads(image: Tensor, direction="forward") -> Tuple[Tensor, Tensor]:
 
 
 def laplacian(image: Tensor, p=1.0, eps=0.0):
-    dx, dy = grads(image)
+    dx, dy = grads_old(image)
     grad_magnitude = (dx**2 + dy**2 + eps).sqrt().pow(p - 2)
-    dx_weighted, _ = grads(dx * grad_magnitude, "backward")
-    _, dy_weighted = grads(dy * grad_magnitude, "backward")
+    dx_weighted, _ = grads_old(dx * grad_magnitude, "backward")
+    _, dy_weighted = grads_old(dy * grad_magnitude, "backward")
     return dx_weighted + dy_weighted
+
+
+def roberts(image: Tensor):
+    # Goal: detect edges in diagonal directions
+    # Simple and fast, but sensitive to noise and will not detect horizontal/vertical edges
+    f1 = F.conv2d(
+        input=image,
+        weight=torch.tensor([[1.0, 0.0], [0.0, -1.0]], device=image.device).reshape(
+            1, 1, 2, 2
+        ),
+    )
+    f2 = F.conv2d(
+        input=image,
+        weight=torch.tensor([[0.0, 1.0], [-1.0, 0.0]], device=image.device).reshape(
+            1, 1, 2, 2
+        ),
+    )
+    return f1, f2
+
+
+def prewitt(image: Tensor):
+    # Goal: detect edges in vertical and horizontal directions
+    # Less sensitive to noise than Roberts, less precise than Sobel
+    x_filter = torch.tensor(
+        [-1.0, -1.0, -1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0], device=image.device
+    ).reshape(1, 1, 3, 3)
+    y_filter = torch.tensor(
+        [-1.0, 0.0, 1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0], device=image.device
+    ).reshape(1, 1, 3, 3)
+    return F.conv2d(image, x_filter), F.conv2d(image, y_filter)
+
+
+def sobel(image: Tensor):
+    # Goal: detect edges in vertical and horizontal directions, emphasizing them
+    # More robust to noise, and gives a good balance of noise reduction and edge detection
+    x_filter = torch.tensor(
+        [-1.0, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0], device=image.device
+    ).reshape(1, 1, 3, 3)
+    y_filter = torch.tensor(
+        [-1.0, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0], device=image.device
+    ).reshape(1, 1, 3, 3)
+    conv_x = F.conv2d(input=image, weight=x_filter)
+    conv_y = F.conv2d(input=image, weight=y_filter)
+    return conv_x, conv_y
+
+
+def kirsch(image: Tensor):
+    f1 = torch.tensor(
+        [-1.0, -1.0, -1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0], device=image.device
+    ).reshape(1, 1, 3, 3)
+    f2 = torch.tensor(
+        [-1.0, 0.0, 1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0], device=image.device
+    ).reshape(1, 1, 3, 3)
+    f3 = torch.tensor(
+        [-1.0, -1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 1.0, 1.0], device=image.device
+    ).reshape(1, 1, 3, 3)
+    f4 = torch.tensor(
+        [0.0, 1.0, 1.0, -1.0, 0.0, 1.0, -1.0, -1.0, 0.0], device=image.device
+    ).reshape(1, 1, 3, 3)
+    filters = [f1, f2, f3, f4]
+    return [F.conv2d(input=image, weight=f) for f in filters]
+
+
+def dct_3(image: Tensor):
+    filters = [
+        torch.tensor(
+            [-0.41, -0.41, -0.41, 0.0, 0.0, 0.0, 0.41, 0.41, 0.41], device=image.device
+        ).reshape(1, 1, 3, 3),
+        torch.tensor(
+            [0.24, 0.24, 0.24, -0.47, -0.47, -0.47, 0.24, 0.24, 0.24],
+            device=image.device,
+        ).reshape(1, 1, 3, 3),
+        torch.tensor(
+            [0.41, 0.0, -0.41, 0.41, 0.0, -0.41, 0.41, 0.0, -0.41], device=image.device
+        ).reshape(1, 1, 3, 3),
+        torch.tensor(
+            [-0.5, 0.0, 0.5, 0.0, 0.0, 0.0, 0.5, 0.0, -0.5], device=image.device
+        ).reshape(1, 1, 3, 3),
+        torch.tensor(
+            [0.29, 0.0, -0.29, -0.58, 0.0, 0.58, 0.29, 0.0, -0.29], device=image.device
+        ).reshape(1, 1, 3, 3),
+        torch.tensor(
+            [0.24, -0.47, 0.24, 0.24, -0.47, 0.24, 0.24, -0.47, 0.24],
+            device=image.device,
+        ).reshape(1, 1, 3, 3),
+        torch.tensor(
+            [-0.29, 0.58, -0.29, 0.0, 0.0, 0.0, 0.29, -0.58, 0.29], device=image.device
+        ).reshape(1, 1, 3, 3),
+        torch.tensor(
+            [0.17, -0.33, 0.17, -0.33, 0.67, -0.33, 0.17, -0.33, 0.17],
+            device=image.device,
+        ).reshape(1, 1, 3, 3),
+    ]
+    return [F.conv2d(input=image, weight=f) for f in filters]
+
+
+def grads(image: Tensor):
+    if image.dim() == 3:
+        image = image.unsqueeze(0)
+        print(
+            "grads - WARN: input image has 3 dimensions instead of 4. Adding new dim."
+        )
+    x_filter = torch.tensor(
+        [0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0], device=image.device
+    ).reshape(1, 1, 3, 3)
+    y_filter = torch.tensor(
+        [0.0, 0.0, 0.0, 0.0, -1.0, 1.0, 0.0, 0.0, 0.0], device=image.device
+    ).reshape(1, 1, 3, 3)
+    dx = F.conv2d(image, x_filter, padding="same")
+    dy = F.conv2d(image, y_filter, padding="same")
+    return dx, dy

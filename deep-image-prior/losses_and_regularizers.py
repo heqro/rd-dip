@@ -4,7 +4,7 @@ import torch
 from torch import Tensor, i0, nn, log
 from torch.special import i1
 from typing import List, Tuple
-from _utils import grads, laplacian
+from _utils import grads, laplacian, prewitt, kirsch
 from torch.nn import functional as F
 
 
@@ -162,6 +162,28 @@ class Total_Variation(RegularizationTerm):
         return (grad_x**2 + grad_y**2 + self.ε).pow(self.p / 2).mean()
 
 
+class Prewitt_Filter(RegularizationTerm):
+    def __init__(self, p=1.0, ε=1e-6):
+        self.p = p
+        self.ε = ε
+
+    def regularization(self, prediction: Tensor) -> Tensor:
+        prewitt_x, prewitt_y = prewitt(prediction)
+        return (prewitt_x**2 + prewitt_y**2 + self.ε).pow(self.p / 2).mean()
+
+
+class Kirsch_Filter(RegularizationTerm):
+    def __init__(self, p=1.0, ε=1e-6):
+        self.p = p
+        self.ε = ε
+
+    def regularization(self, prediction: Tensor) -> Tensor:
+        result = torch.tensor(0.0, requires_grad=True)
+        for u_dir in kirsch(prediction):
+            result = result + u_dir**2
+        return (result + self.ε).pow(self.p / 2).mean()
+
+
 class Discrete_Cosine_Transform(RegularizationTerm):
     def __init__(
         self,
@@ -193,7 +215,7 @@ class Discrete_Cosine_Transform(RegularizationTerm):
         ).to(device)
 
     def phi(self, x: Tensor, p=1.0):
-        return (1 / p) * ((x**2).sum(dim=1) + self.ε**2).pow(p / 2)
+        return (2 / p) * ((x**2).sum(dim=1) + self.ε**2).pow(p / 2)
 
     def regularization(self, prediction: Tensor) -> Tensor:
         if len(prediction.shape) == 3:
@@ -203,8 +225,7 @@ class Discrete_Cosine_Transform(RegularizationTerm):
                 f"Expected prediction to have shape 4, but it is {len(prediction.shape)}"
             )
         b, c, w, h = prediction.shape
-        prediction = prediction.view(c, b, w, h)  # more efficient
-        # z = z.permute(1, 0, 2, 3) #
+        prediction = prediction.view(c, b, w, h)
         k_x_3 = F.conv2d(prediction, weight=self.filters, groups=1, dilation=1)
         y = (
             self.phi(k_x_3, p=self.p) / self.filters.shape[0]

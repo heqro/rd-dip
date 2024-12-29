@@ -21,6 +21,8 @@ if is_debugging:
         "0.15",
         "--fidelities",
         "Rician_Norm:1.0:0.15",
+        "--regularizers",
+        "Total_Variation:1.0:1.0:0.75",
         "--tag",
         "Test",
         "--max_its",
@@ -163,6 +165,7 @@ parser.add_argument("--max_its", type=int, default=30000)
 parser.add_argument("--dip_noise_std", type=float, default=0.15)
 parser.add_argument("--model", type=str, required=not is_debugging)
 parser.add_argument("--lr", type=float, default=1e-2)
+parser.add_argument("--N", type=int, default=1)
 
 
 # ⌨️
@@ -194,7 +197,7 @@ seed = 0.1 * torch.rand(
     images.mask.shape[-1],
 ).to(
     images.noisy_image.device
-).expand(15, -1, -1, -1)
+).expand(args.N, -1, -1, -1)
 
 p: Problem = {
     "images": images,
