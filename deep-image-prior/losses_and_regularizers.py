@@ -193,7 +193,7 @@ class Discrete_Cosine_Transform(RegularizationTerm):
         ).to(device)
 
     def phi(self, x: Tensor, p=1.0):
-        return (1 / p) * ((x**2).sum(dim=1) + self.ε**2).pow(p / 2)
+        return (2 / p) * ((x**2).sum(dim=1) + self.ε**2).pow(p / 2)
 
     def regularization(self, prediction: Tensor) -> Tensor:
         if len(prediction.shape) == 3:
@@ -203,8 +203,7 @@ class Discrete_Cosine_Transform(RegularizationTerm):
                 f"Expected prediction to have shape 4, but it is {len(prediction.shape)}"
             )
         b, c, w, h = prediction.shape
-        prediction = prediction.view(c, b, w, h)  # more efficient
-        # z = z.permute(1, 0, 2, 3) #
+        prediction = prediction.view(c, b, w, h)
         k_x_3 = F.conv2d(prediction, weight=self.filters, groups=1, dilation=1)
         y = (
             self.phi(k_x_3, p=self.p) / self.filters.shape[0]
