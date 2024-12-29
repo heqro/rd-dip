@@ -48,7 +48,8 @@ ssim = SSIM(n_channels=1).to(dev)
 def save_best_img(best_img: Tensor, it: str):
     _utils.print_image(
         (best_img.squeeze().cpu().detach().numpy() * 255).astype(np.uint8),
-        f"results/Brain{args.index}/test_denoised_images/{args.tag}{it}.png",
+        # f"results/Brain{args.index}/denoised_images/{args.tag}{it}.png",
+        f"results/Brain{args.index}/def_denoised/{args.tag}{it}.png",
     )
 
 
@@ -63,7 +64,8 @@ def save_best_ssim(best_img: Tensor, ground_truth: Tensor, it: str):
     )
     _utils.print_image(
         (img_ssim[0].clip(0, 1) * 255).astype(np.uint8),
-        f"results/Brain{args.index}/test_ssim_images/{args.tag}{it}.png",
+        # f"results/Brain{args.index}/ssim_images/{args.tag}{it}.png",
+        f"results/Brain{args.index}/def_ssim/{args.tag}{it}.png",
     )
 
 
@@ -160,7 +162,7 @@ parser.add_argument(
 parser.add_argument(
     "--dip_noise_type", choices=["Gaussian", "Rician", ""], default="Gaussian"
 )
-parser.add_argument("--max_its", type=int)
+parser.add_argument("--max_its", type=int, default=30000)
 parser.add_argument("--dip_noise_std", type=float, default=0.15)
 parser.add_argument("--model", type=str, required=not is_debugging)
 parser.add_argument("--lr", type=float, default=1e-2)
@@ -198,7 +200,7 @@ p: Problem = {
     "images": images,
     "psnr": psnr,
     "ssim": ssim,
-    "max_its": args.max_its // 1000,
+    "max_its": args.max_its,
     "tag": args.tag,
     "optimizer": torch.optim.Adam(model.parameters(), lr=args.lr),
     "loss_config": composite_loss,
@@ -213,13 +215,13 @@ p: Problem = {
 
 report = initialize_experiment_report(p)
 
-for it in range(1, 3000):  # take 3000 'best images'
-    report, best_img = solve(p, report)
-    save_best_img(best_img, str(it * p["max_its"]))
-    save_best_ssim(best_img, images.ground_truth, str(it * p["max_its"]))
-    if report["exit_code"] != 0:
-        break
+# for it in range(1, 3000):  # take 3000 'best images'
+report, best_img = solve(p, report)
+save_best_img(best_img, "")
+save_best_ssim(best_img, images.ground_truth, "")
+# if report["exit_code"] != 0:
+#     break
 
 
-with open(f"results/Brain{args.index}/jsons/{args.tag}.json", "w") as json_file:
+with open(f"results/Brain{args.index}/def_jsons/{args.tag}.json", "w") as json_file:
     json.dump(report, json_file, indent=4)
