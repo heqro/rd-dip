@@ -162,6 +162,28 @@ class Total_Variation(RegularizationTerm):
         return (grad_x**2 + grad_y**2 + self.ε).pow(self.p / 2).mean()
 
 
+class Prewitt_Filter(RegularizationTerm):
+    def __init__(self, p=1.0, ε=1e-6):
+        self.p = p
+        self.ε = ε
+
+    def regularization(self, prediction: Tensor) -> Tensor:
+        prewitt_x, prewitt_y = prewitt(prediction)
+        return (prewitt_x**2 + prewitt_y**2 + self.ε).pow(self.p / 2).mean()
+
+
+class Kirsch_Filter(RegularizationTerm):
+    def __init__(self, p=1.0, ε=1e-6):
+        self.p = p
+        self.ε = ε
+
+    def regularization(self, prediction: Tensor) -> Tensor:
+        result = torch.tensor(0.0, requires_grad=True)
+        for u_dir in kirsch(prediction):
+            result = result + u_dir**2
+        return (result + self.ε).pow(self.p / 2).mean()
+
+
 class Discrete_Cosine_Transform(RegularizationTerm):
     def __init__(
         self,
