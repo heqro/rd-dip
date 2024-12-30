@@ -23,8 +23,6 @@ if is_debugging:
         "Rician_Norm:1.0:0.15",
         "--regularizers",
         "Total_Variation:1.0:1.0:0.75",
-        "--tag",
-        "Test",
         "--max_its",
         "30",
         "--dip_noise_type",
@@ -35,6 +33,17 @@ if is_debugging:
         "UNet",
         "--lr",
         "1e-3",
+        "--channels_list",
+        "3",
+        "128",
+        "128",
+        "128",
+        "128",
+        "--skip_sizes",
+        "4",
+        "4",
+        "4",
+        "4",
     ]
 
 
@@ -47,14 +56,29 @@ psnr = PSNR()
 ssim = SSIM(n_channels=1).to(dev)
 
 
-def save_best_img(best_img: Tensor, it: str, subject_idx: str):
+# Function to generate a unique UUID not present in the target folder
+def generate_unique_uuid(target_folder):
+    import uuid
+    import os
+
+    while True:
+        unique_id = str(uuid.uuid4())
+        if unique_id not in os.listdir(
+            target_folder
+        ):  # Ensure it's not already present
+            return unique_id
+
+
+def save_best_img(best_img: Tensor, it: str, subject_idx: str, tag: str):
     _utils.print_image(
         (best_img.squeeze().cpu().detach().numpy() * 255).astype(np.uint8),
-        f"results/subject_{subject_idx}/def_denoised/{args.tag}{it}.png",
+        f"results/subject_{subject_idx}/def_denoised/{tag}{it}.png",
     )
 
 
-def save_best_ssim(best_img: Tensor, ground_truth: Tensor, it: str, subject_idx: str):
+def save_best_ssim(
+    best_img: Tensor, ground_truth: Tensor, it: str, subject_idx: str, tag: str
+):
     _, img_ssim = ssim_sk(
         ground_truth.squeeze().cpu().numpy(),
         best_img.squeeze().cpu().detach().numpy(),
@@ -64,7 +88,7 @@ def save_best_ssim(best_img: Tensor, ground_truth: Tensor, it: str, subject_idx:
     )  # img_ssim is HxW
     _utils.print_image(
         (img_ssim.clip(0, 1) * 255).astype(np.uint8),
-        f"results/subject_{subject_idx}/def_ssim/{args.tag}{it}.png",
+        f"results/subject_{subject_idx}/def_ssim/{tag}{it}.png",
     )
 
 
@@ -151,14 +175,6 @@ parser.add_argument(
     default=[],
 )
 parser.add_argument(
-    "--tag",
-    type=str,
-    required=not is_debugging,
-    help=(
-        "The tag for the experiment. It should reflect the characteristics of it for finding it easily along other results. An idea is Std$std_$Fidelities_$Regularizers"
-    ),
-)
-parser.add_argument(
     "--dip_noise_type", choices=["Gaussian", "Rician", ""], default="Gaussian"
 )
 parser.add_argument("--max_its", type=int, default=30000)
@@ -166,6 +182,10 @@ parser.add_argument("--dip_noise_std", type=float, default=0.15)
 parser.add_argument("--model", type=str, required=not is_debugging)
 parser.add_argument("--lr", type=float, default=1e-2)
 parser.add_argument("--N", type=int, default=1)
+parser.add_argument(
+    "--channels_list", type=int, nargs="*", default=[3, 128, 128, 128, 128, 128]
+)
+parser.add_argument("--skip_sizes", type=int, nargs="*", default=[4, 4, 4, 4, 4])
 
 
 # ⌨️
@@ -175,8 +195,10 @@ model = globals().get(args.model)
 if model is None:
     print(f"Model {args.model} not found")
     quit(-1)
-
-model = model().to(dev)  # initialize model with default parameters
+if model != UNet:
+    model = model().to(dev)  # initialize model with default parameters
+else:
+    model = UNet(channels_list=args.channels_list, skip_sizes=args.skip_sizes).to(dev)
 std = args.noise_std
 composite_loss = load_experiment_config(args.fidelities, args.regularizers)
 noisy_gt_cpu, gt_cpu, mask_cpu = load_experiment_data(
@@ -199,12 +221,14 @@ seed = 0.1 * torch.rand(
     images.noisy_image.device
 ).expand(args.N, -1, -1, -1)
 
+tag = generate_unique_uuid(f"results/subject_{args.subject}/def_jsons/")
+
 p: Problem = {
     "images": images,
     "psnr": psnr,
     "ssim": ssim,
     "max_its": args.max_its,
-    "tag": args.tag,
+    "tag": tag,
     "optimizer": torch.optim.Adam(model.parameters(), lr=args.lr),
     "loss_config": composite_loss,
     "dip_config": {
@@ -212,6 +236,7 @@ p: Problem = {
         "std": args.dip_noise_std,
         "model": model,
         "seed": seed,
+        "simultaneous_perturbations": args.N,
     },
     "image_name": f"subject_{args.subject}",
 }
@@ -220,13 +245,11 @@ report = initialize_experiment_report(p)
 
 # for it in range(1, 3000):  # take 3000 'best images'
 report, best_img = solve(p, report)
-save_best_img(best_img, "", subject_idx=args.subject)
-save_best_ssim(best_img, images.ground_truth, "", subject_idx=args.subject)
+save_best_img(best_img, "", subject_idx=args.subject, tag=tag)
+save_best_ssim(best_img, images.ground_truth, "", subject_idx=args.subject, tag=tag)
 # if report["exit_code"] != 0:
 #     break
 
 
-with open(
-    f"results/subject_{args.subject}/def_jsons/{args.tag}.json", "w"
-) as json_file:
+with open(f"results/subject_{args.subject}/def_jsons/{tag}.json", "w") as json_file:
     json.dump(report, json_file, indent=4)

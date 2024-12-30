@@ -63,13 +63,13 @@ class UNet(torch.nn.Module):
         for idx in reversed(range(2, len(channels_list))):  # skip shallowest layer
             ch_in, ch_out = channels_list[idx], channels_list[idx - 1]
             self.upsamplers.append(
-                get_upsampler(ch_in + 4, ch_out).append(
+                get_upsampler(ch_in + skip_sizes[idx - 1], ch_out).append(
                     nn.Upsample(scale_factor=2, mode="bilinear")
                 )
             )
 
         self.upsamplers.append(
-            get_upsampler(channels_list[1] + 4, channels_list[1])
+            get_upsampler(channels_list[1] + skip_sizes[0], channels_list[1])
             .append(nn.Conv2d(channels_list[1], n_channels_output, kernel_size=(1, 1)))
             .append(nn.Sigmoid())
         )

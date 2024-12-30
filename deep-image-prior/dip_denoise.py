@@ -27,7 +27,8 @@ class LossLog(TypedDict):
 class DIP_Report(TypedDict):
     it_noise_type: Literal["", "Rician", "Gaussian"]
     it_noise_std: float
-    net_architecture: str
+    net_architecture: dict[str, str]
+    simultaneous_perturbations: int
 
 
 class OptimizerProfile(TypedDict):
@@ -73,6 +74,7 @@ class DIP(TypedDict):
     std: float
     model: nn.Module
     seed: Tensor
+    simultaneous_perturbations: int
 
 
 class Problem(TypedDict):
@@ -99,7 +101,12 @@ def initialize_experiment_report(p: Problem) -> ExperimentReport:
         "dip_config": {
             "it_noise_type": aux,
             "it_noise_std": p["dip_config"]["std"],
-            "net_architecture": p["dip_config"]["model"]._get_name(),
+            "simultaneous_perturbations": p["dip_config"]["simultaneous_perturbations"],
+            "net_architecture": {
+                "name": p["dip_config"]["model"]._get_name(),
+                "channels_list": p["dip_config"]["model"].channels_list,
+                "skips_sizes": p["dip_config"]["model"].skip_sizes,
+            },
         },
         "image_noise_std": p["images"].rician_noise_std,
         "loss_log": {"overall_loss": [], "addends": {}},
