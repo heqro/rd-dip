@@ -48,7 +48,7 @@ deep-image-prior/results/Brain1/def_denoised/*
 deep-image-prior/results/Brain1/def_ssim/*
 deep-image-prior/results/Brain1/def_jsons/*
 .results_server/__pycache__/*
-deep-image-prior/results/subject_04/*
+deep-image-prior/results/*
 deep-image-prior/dct_3_0.png
 deep-image-prior/dct_3_1.png
 deep-image-prior/dct_3_2.png
@@ -80,3 +80,17 @@ deep-image-prior/apply_conv_noisy.pdf
 deep-image-prior/apply_conv_sub_1.pdf
 deep-image-prior/apply_conv_sub.pdf
 deep-image-prior/dct_filters_and_plot.pdf
+deep-image-prior/non_local_filters_and_plot.pdf
+deep-image-prior/barbara.jpg
+deep-image-prior/denoised_RicianNet.png
+deep-image-prior/denoised_Tag.png
+deep-image-prior/noisy_slice_Brain1.png
+deep-image-prior/noisy_slice.png
+deep-image-prior/oldyoungwoman.png
+deep-image-prior/Original_Mine.png
+deep-image-prior/Prueba.png
+deep-image-prior/scalar_field_cropped_192x192.png
+deep-image-prior/slice_original_cropped_192x192.png
+deep-image-prior/.brainweb_test_data/im_1/noisy_std0.20.png
+deep-image-prior/.complex_test_data/masks/Brain1_160x128_44x_0y_mask.png
+deep-image-prior/.brainweb_test_data/im_1/containate.py
