@@ -16,7 +16,7 @@ is_debugging = False
 if is_debugging:
     sys.argv += [
         "--subject",
-        "04",
+        "1",
         "--noise_std",
         "0.15",
         "--fidelities",
@@ -72,7 +72,7 @@ def generate_unique_uuid(target_folder):
 def save_best_img(best_img: Tensor, it: str, subject_idx: str, tag: str):
     _utils.print_image(
         (best_img.squeeze().cpu().detach().numpy() * 255).astype(np.uint8),
-        f"results/subject_{subject_idx}/def_denoised/{tag}{it}.png",
+        f"results/im_{subject_idx}/def_denoised/{tag}{it}.png",
     )
 
 
@@ -88,7 +88,7 @@ def save_best_ssim(
     )  # img_ssim is HxW
     _utils.print_image(
         (img_ssim.clip(0, 1) * 255).astype(np.uint8),
-        f"results/subject_{subject_idx}/def_ssim/{tag}{it}.png",
+        f"results/im_{subject_idx}/def_ssim/{tag}{it}.png",
     )
 
 
@@ -111,19 +111,19 @@ def load_experiment_data(
 ):
     gt_cpu = _utils.crop_image(
         _utils.load_serialized_image(
-            f".brainweb_test_data/subject_{subject_idx}/subject_{subject_idx}_gt.pt",
+            f".brainweb_test_data/im_{subject_idx}/gt.pt",
             normalize=False,
         )
     )  # image is already normalized
     mask_cpu = _utils.crop_image(
         _utils.load_gray_image(
-            f".brainweb_test_data/subject_{subject_idx}/subject_{subject_idx}_mask.png",
+            f".brainweb_test_data/im_{subject_idx}/mask.png",
             is_mask=True,
         )
     )
     noisy_gt_cpu = _utils.crop_image(
         _utils.load_serialized_image(
-            f".brainweb_test_data/subject_{subject_idx}/subject_{subject_idx}_Std{noise_std}.pt",
+            f".brainweb_test_data/im_{subject_idx}/Std{noise_std}.pt",
             normalize=False,
         )  # image is contaminated (i.e., values not in the interval [0,1]), so we don't normalize
     )
@@ -145,8 +145,8 @@ parser.add_argument(
 parser.add_argument(
     "--noise_std",
     type=str,
-    choices=["0.05", "0.10", "0.15", "0.20"],
-    help="Noise strength (must be one of 0.05, 0.10, 0.15, 0.20)",
+    choices=["0.05", "0.10", "0.15"],
+    help="Noise strength (must be one of 0.05, 0.10, 0.15)",
     default="0.15",
 )
 parser.add_argument(
@@ -177,7 +177,7 @@ parser.add_argument(
 parser.add_argument(
     "--dip_noise_type", choices=["Gaussian", "Rician", ""], default="Gaussian"
 )
-parser.add_argument("--max_its", type=int, default=30000)
+parser.add_argument("--max_its", type=int, default=20)
 parser.add_argument("--dip_noise_std", type=float, default=0.15)
 parser.add_argument("--model", type=str, required=not is_debugging)
 parser.add_argument("--lr", type=float, default=1e-2)
@@ -221,7 +221,7 @@ seed = 0.1 * torch.rand(
     images.noisy_image.device
 ).expand(args.N, -1, -1, -1)
 
-tag = generate_unique_uuid(f"results/subject_{args.subject}/def_jsons/")
+tag = generate_unique_uuid(f"results/im_{args.subject}/def_jsons/")
 
 p: Problem = {
     "images": images,
@@ -238,7 +238,7 @@ p: Problem = {
         "seed": seed,
         "simultaneous_perturbations": args.N,
     },
-    "image_name": f"subject_{args.subject}",
+    "image_name": f"im_{args.subject}",
 }
 
 report = initialize_experiment_report(p)
@@ -251,5 +251,5 @@ save_best_ssim(best_img, images.ground_truth, "", subject_idx=args.subject, tag=
 #     break
 
 
-with open(f"results/subject_{args.subject}/def_jsons/{tag}.json", "w") as json_file:
+with open(f"results/im_{args.subject}/def_jsons/{tag}.json", "w") as json_file:
     json.dump(report, json_file, indent=4)
