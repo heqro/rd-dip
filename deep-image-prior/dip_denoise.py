@@ -236,14 +236,19 @@ def solve(
         )  # mean is no-op when batch_size == 1
 
         if prediction.isnan().any():
-            print("ERR: model.forward() returned NANs. Terminating prematurely.")
+            print(f"{it} ERR: model.forward() returned NANs. Terminating prematurely.")
             experiment_report["exit_code"] = -1
             break
 
         loss = p["loss_config"].evaluate_losses(prediction, p["images"].noisy_image)
 
         if loss.isnan():
-            print("ERR: loss is NAN. Terminating prematurely.")
+            print(f"{it} ERR: loss is NAN. Terminating prematurely.")
+            experiment_report["exit_code"] = -1
+            break
+
+        if loss.isinf() or loss.isneginf():
+            print(f"{it} ERR: loss is +-infty. Terminating prematurely.")
             experiment_report["exit_code"] = -1
             break
 
@@ -256,6 +261,8 @@ def solve(
             bounding_box,
             best_img,
         )
+
+        print(f"{it}: {loss.item():.2f}, best_psnr: {best_psnr:.2f}")
         loss.backward()
         p["optimizer"].step()
     update_report_losses(experiment_report, p["loss_config"])
