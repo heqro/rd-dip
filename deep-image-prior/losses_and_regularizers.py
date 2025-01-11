@@ -91,10 +91,10 @@ class Rician(FidelityTerm):
         self.std = std
 
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
-        return (
-            prediction.square() / (2 * self.std**2)
-            - log(i0(target * prediction / self.std**2))
-        ).mean()
+        prediction = prediction.double()
+        target = target.double()
+        i_arg = (prediction * target / self.std**2).double()
+        return (prediction.square() / (2 * self.std**2) - log(i0(i_arg))).mean()
 
     def get_mask(self):
         raise NotImplementedError("Not implemented yet")
@@ -105,9 +105,10 @@ class Rician_Norm_Unstable(FidelityTerm):
         self.std = std
 
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
-        r = i1(prediction * target / self.std**2) / i0(
-            prediction * target / self.std**2
-        )
+        prediction = prediction.double()
+        target = target.double()
+        i_arg = (prediction * target / self.std**2).double()
+        r = i1(i_arg) / i0(i_arg)
         return (prediction - r * target).square().mean()
 
     def get_mask(self):
@@ -119,9 +120,10 @@ class Rician_Norm(FidelityTerm):
         self.std = std
 
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
-        r_inv = i0(prediction * target / self.std**2) / i1(
-            prediction * target / self.std**2
-        )
+        prediction = prediction.double()
+        target = target.double()
+        i_arg = (prediction * target / self.std**2).double()
+        r_inv = i0(i_arg) / i1(i_arg)
         return (prediction * r_inv - target).square().mean()
 
     def get_mask(self):
