@@ -1,4 +1,3 @@
-import numpy as np
 import os
 import json
 import dash
@@ -12,28 +11,16 @@ from flask_httpauth import HTTPBasicAuth
 from werkzeug.security import check_password_hash, generate_password_hash
 from dash.dash_table import DataTable
 from table_utilities import *
+import pandas as pd
 
 # Path to the directory containing your CSV files
-JSON_DIRECTORY = "../deep-image-prior/results/Brain1/jsons"
-FIDELITIES = ["Gaussian", "Rician", "Rician_Norm"]
-REGULARIZERS = ["Discrete_Cosine_Transform", "Total_Variation"]
-# Get the list of CSV files
-json_files = [f for f in os.listdir(JSON_DIRECTORY) if f.endswith(".json")]
-# Use Plotly's built-in color palette (e.g., 'Set1' from the qualitative palettes)
+EXPERIMENTS_DIR = "../deep-image-prior/results/im_1"
+JSONS_DIR = "def_jsons"
+DENOISED_DIR = "def_denoised"
+SSIM_DIR = "def_ssim"
+
 color_palette = px.colors.qualitative.Set1  # Other options: Set2, Set3, etc.
-COEFS = [
-    "0",
-    "1e0",
-    "1e-1",
-    "1e-2",
-    "1e-3",
-    "1e-4",
-    "1e-5",
-    "1e-6",
-    "1e-7",
-    "1e-8",
-    "1e-9",
-]
+
 
 # Flask app
 server = Flask(__name__)
@@ -63,12 +50,7 @@ def before_request():
     pass
 
 
-full_table_data = load_full_table(json_files, JSON_DIRECTORY)
-
-
-df = load_tiered_table_columns(FIDELITIES, REGULARIZERS, json_files, JSON_DIRECTORY)
-df["Λ"] = COEFS
-df = df[["Λ"] + [col for col in df.columns if col != "Λ"]]
+df = pd.read_csv(f"{EXPERIMENTS_DIR}/summary_Std020.csv", sep=";")
 
 
 # Function to style cells
@@ -97,10 +79,24 @@ for index, row in df.iterrows():
 app.layout = html.Div(
     [
         html.H1("Experiment Data Comparison"),
+        html.Label("Select Experiment Directory:"),
+        dcc.Dropdown(
+            id="dir-selector",
+            options=[
+                {"label": dir, "value": dir}
+                for dir in os.listdir("../deep-image-prior/results")
+                if os.path.isdir(os.path.join("../deep-image-prior/results", dir))
+            ],
+            value="im_1",  # Default directory
+            clearable=False,
+        ),
         html.Label("Select JSON files:"),
         dcc.Dropdown(
             id="json-selector",
-            options=[{"label": f, "value": f} for f in json_files],
+            options=[
+                {"label": f, "value": f}
+                for f in os.listdir(f"{EXPERIMENTS_DIR}/{JSONS_DIR}")
+            ],
             value=[],  # Default no file selected
             multi=True,
         ),
@@ -111,23 +107,6 @@ app.layout = html.Div(
         ),
         html.Div(
             [
-                html.H3("Tiered table"),
-                DataTable(
-                    id="tiered-table",
-                    columns=[
-                        {
-                            "name": "".join([c for c in col if not c.islower()]),
-                            "id": col,
-                            "type": "numeric",
-                            "format": {"specifier": ".2f"},
-                        }
-                        for col in df.columns
-                    ],
-                    data=df.to_dict("records"),  # Convert DataFrame to dict
-                    style_data_conditional=cell_styles,  # Apply styles
-                    style_table={"overflowX": "auto"},
-                    style_cell={"textAlign": "left"},
-                ),
                 html.H3("Summary Table (ALL DATA)"),
                 DataTable(
                     id="summary-table",
@@ -138,11 +117,17 @@ app.layout = html.Div(
                             "type": "numeric",
                             "format": {"specifier": ".2f"},
                         }
-                        for col in full_table_data[0].keys()
+                        for col in df.keys()
                     ],
-                    data=full_table_data,  # Fixed data
+                    data=df.to_dict("records"),  # Fixed data
                     style_table={"overflowX": "auto"},
                     sort_action="native",
+                    css=[
+                        {
+                            "selector": ".dash-cell div.dash-cell-value",
+                            "rule": "user-select: text;",
+                        }
+                    ],
                 ),
             ]
         ),
@@ -177,6 +162,26 @@ def add_data_point(
     )
 
 
+@app.callback(
+    [
+        Output("json-selector", "options"),
+        Output("json-selector", "value"),
+        Output("summary-table", "data"),
+    ],
+    [Input("dir-selector", "value")],
+)
+def update_json_selector_and_table(selected_dir):
+    global EXPERIMENTS_DIR, df
+    EXPERIMENTS_DIR = f"../deep-image-prior/results/{selected_dir}"
+    df = pd.read_csv(f"{EXPERIMENTS_DIR}/summary_Std020.csv", sep=";")
+    json_files = [
+        {"label": f, "value": f}
+        for f in os.listdir(f"{EXPERIMENTS_DIR}/{JSONS_DIR}")
+        if f.endswith(".json")
+    ]
+    return json_files, [], df.to_dict("records")  # Update JSON options and table data
+
+
 # Callback for interactive updates
 @app.callback(
     [Output("comparison-plot", "figure"), Output("image-display", "children")],
@@ -203,7 +208,7 @@ def update_plot(selected_files):
     # Loop through selected files and add traces
     color_cycle = itertools.cycle(color_palette)
     for file in selected_files:
-        with open(f"{JSON_DIRECTORY}/{file}", "r") as jsonfile:
+        with open(f"{EXPERIMENTS_DIR}/{JSONS_DIR}/{file}", "r") as jsonfile:
             data = json.load(jsonfile)
 
         iterations = list(
@@ -226,14 +231,14 @@ def update_plot(selected_files):
             row=1,
             col=1,
         )
-        if stop_idx is not None and stop_idx.is_integer():
+        if stop_idx is not None and isinstance(stop_idx, int):
             fig.add_hline(
                 y=data["loss_log"]["overall_loss"][stop_idx],
                 line=dict(color=color, width=2, dash="dash"),  # Line color and width
                 row=1,  # For subplots
                 col=1,
             )
-        if stop_mask_idx is not None and stop_mask_idx.is_integer():
+        if stop_mask_idx is not None and isinstance(stop_mask_idx, int):
             fig.add_hline(
                 y=data["loss_log"]["overall_loss"][stop_mask_idx],
                 line=dict(color=color, width=2, dash="dot"),  # Line color and width
@@ -270,7 +275,7 @@ def update_plot(selected_files):
         max_data = max(data["psnr_mask_log"])
         max_data_idx = data["psnr_mask_log"].index(max_data)
         add_data_point(fig, max_data_idx, max_data, color, iterations, 2, 1, hovertext="Maximum")  # type: ignore
-        if stop_mask_idx is not None and stop_mask_idx.is_integer():
+        if stop_mask_idx is not None and isinstance(stop_mask_idx, int):
             add_data_point(
                 fig,
                 stop_mask_idx,
@@ -281,7 +286,7 @@ def update_plot(selected_files):
                 col=1,
                 hovertext="Stopping criterion (mask)",
             )
-        if stop_idx is not None and stop_idx.is_integer():
+        if stop_idx is not None and isinstance(stop_idx, int):
             add_data_point(
                 fig,
                 stop_idx,
@@ -308,7 +313,7 @@ def update_plot(selected_files):
         max_data = max(data["ssim_mask_log"])
         max_data_idx = data["ssim_mask_log"].index(max_data)
         add_data_point(fig, max_data_idx, max_data, color, iterations, 2, 2, hovertext="Maximum")  # type: ignore
-        if stop_mask_idx is not None and stop_mask_idx.is_integer():
+        if stop_mask_idx is not None and isinstance(stop_mask_idx, int):
             add_data_point(
                 fig,
                 stop_mask_idx,
@@ -319,7 +324,7 @@ def update_plot(selected_files):
                 col=2,
                 hovertext="Stopping criterion (mask)",
             )
-        if stop_idx is not None and stop_idx.is_integer():
+        if stop_idx is not None and isinstance(stop_idx, int):
             add_data_point(
                 fig,
                 stop_idx,
@@ -355,7 +360,7 @@ def update_plot(selected_files):
         html.Div(
             [
                 html.Img(
-                    src=f"assets/Brain1/Brain1.png",
+                    src=f"assets/{EXPERIMENTS_DIR.split('/')[-1]}/gt.png",
                     style={"height": "256px", "border": "1px solid black"},
                 ),
                 html.P("Ground truth", style={"text-align": "center"}),
@@ -366,7 +371,7 @@ def update_plot(selected_files):
         html.Div(
             [
                 html.Img(
-                    src=f"assets/Brain1/Contaminated_Brain1_0.15.png",
+                    src=f"assets/{EXPERIMENTS_DIR.split('/')[-1]}/Std0.10.png",
                     style={"height": "256px", "border": "1px solid black"},
                 ),
                 html.P("Noisy", style={"text-align": "center"}),
@@ -379,7 +384,7 @@ def update_plot(selected_files):
             html.Div(
                 [
                     html.Img(
-                        src=f"assets/Brain1/{image_name}",
+                        src=f"assets/{EXPERIMENTS_DIR.split('/')[-1]}/{image_name}",
                         style={"height": "256px", "border": "1px solid black"},
                     ),
                     html.P(
