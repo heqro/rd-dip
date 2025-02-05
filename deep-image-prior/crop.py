@@ -5,18 +5,30 @@ import numpy as np
 
 # Load the image (assuming load_gray_image function is used)
 # imtitle = "Im7-RicianNormDCT.png"
-imtitle = "DenoisingofMagneticResonanceImageswithDeepNeuralRegularizerDrivenbyImagePrior-slice4.png"
+# imtitle = "DenoisingofMagneticResonanceImageswithDeepNeuralRegularizerDrivenbyImagePrior-slice4.png"
 # imtitle = "Im7-Std0.15.png"
 # imtitle = "Im7-Gaussian.png"
+# imtitle = "Im7-RicianNet.png"
+# imtitle = "/mnt/data_drive/hrodrigo/mri_rician_noise/.nppy_testing/images_exported_to_png/slice_original_DenoisingofMagneticResonanceImageswithDeepNeuralRegularizerDrivenbyImagePrior-slice2.png"
+imtitle = "/mnt/data_drive/hrodrigo/mri_rician_noise/deep-image-prior/.brainweb_test_data/im_5/Std0.15.png"
+# imtitle = "/mnt/data_drive/hrodrigo/mri_rician_noise/deep-image-prior/bd853dc4-80f9-4e80-a97e-f108eb8f7ec8.png"
 
 img = load_gray_image(imtitle, is_mask=False).numpy()[0]
 
 # Define the regions of interest (ROIs)
-rois = [
-    (70, 35, 48, 48),
-    (100, 130, 48, 48),
+rois_gaussian_motivation_im5 = [
+    (15, 30, 48, 48),
+    (100, 170, 48, 48),
     (140, 80, 48, 48),
 ]  # Coordinates (x, y, width, height)
+rois = rois_gaussian_motivation_im5
+# Define the regions of interest (ROIs)
+# rois = [
+#     (70, 35, 48, 48),
+#     (100, 130, 48, 48),
+#     (140, 80, 48, 48),
+# ]  # Coordinates (x, y, width, height)
+
 
 # Create a figure for displaying the ROIs in a row
 fig, axs = plt.subplots(1, len(rois))
