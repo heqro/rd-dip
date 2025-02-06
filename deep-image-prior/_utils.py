@@ -293,3 +293,33 @@ def grads(image: Tensor):
     dx = F.conv2d(image, x_filter, padding="same")
     dy = F.conv2d(image, y_filter, padding="same")
     return dx, dy
+
+
+def derivative5(image: Tensor):
+    k_1 = torch.tensor([0.037659, 0.249153, 0.426375, 0.249153, 0.037659]).reshape(
+        1, 1, -1, 1
+    )
+    k_2 = torch.tensor(
+        [
+            0.109604,
+            0.276691,
+            0.0,
+            -0.276691,
+            -0.109604,
+        ]
+    ).reshape(1, 1, 1, -1)
+    dx = F.conv2d(
+        F.conv2d(image, k_1.view(1, 1, -1, 1), padding="same"),
+        k_2.view(1, 1, 1, -1),
+        padding="same",
+    )
+    dy = F.conv2d(
+        F.conv2d(image, k_2.view(1, 1, 1, -1), padding="same"),
+        k_1.view(1, 1, 1, -1),
+        padding="same",
+    )
+    return dx, dy
+
+
+def anscombe_transform(x: torch.Tensor, sigma: float):
+    return torch.sqrt(torch.clip(x**2 - sigma**2, 0))
