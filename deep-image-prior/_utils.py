@@ -296,9 +296,7 @@ def grads(image: Tensor):
 
 
 def derivative5(image: Tensor):
-    k_1 = torch.tensor([0.037659, 0.249153, 0.426375, 0.249153, 0.037659]).reshape(
-        1, 1, -1, 1
-    )
+    k_1 = torch.tensor([0.037659, 0.249153, 0.426375, 0.249153, 0.037659])
     k_2 = torch.tensor(
         [
             0.109604,
@@ -307,14 +305,34 @@ def derivative5(image: Tensor):
             -0.276691,
             -0.109604,
         ]
-    ).reshape(1, 1, 1, -1)
+    )
     dx = F.conv2d(
         F.conv2d(image, k_1.view(1, 1, -1, 1), padding="same"),
         k_2.view(1, 1, 1, -1),
         padding="same",
     )
     dy = F.conv2d(
-        F.conv2d(image, k_2.view(1, 1, 1, -1), padding="same"),
+        F.conv2d(image, k_2.view(1, 1, -1, 1), padding="same"),
+        k_1.view(1, 1, 1, -1),
+        padding="same",
+    )
+    return dx, dy
+
+
+def derivative7(image: Tensor):
+    k_1 = torch.tensor(
+        [0.004711, 0.069321, 0.245410, 0.361117, 0.245410, 0.069321, 0.004711]
+    )
+    k_2 = torch.tensor(
+        [0.018708, 0.125376, 0.193091, 0.0, -0.193091, -0.125376, -0.018708]
+    )
+    dx = F.conv2d(
+        F.conv2d(image, k_1.view(1, 1, -1, 1), padding="same"),
+        k_2.view(1, 1, 1, -1),
+        padding="same",
+    )
+    dy = F.conv2d(
+        F.conv2d(image, k_2.view(1, 1, -1, 1), padding="same"),
         k_1.view(1, 1, 1, -1),
         padding="same",
     )
