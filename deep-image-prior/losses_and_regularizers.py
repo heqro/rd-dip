@@ -4,7 +4,7 @@ import torch
 from torch import Tensor, nn, log
 from torch.special import i0, i1, i0e, i1e
 from typing import List, Tuple
-from _utils import grads, laplacian, prewitt, kirsch
+from _utils import grads, laplacian, prewitt, kirsch, derivative7
 from torch.nn import functional as F
 
 
@@ -157,6 +157,16 @@ class Total_Variation(RegularizationTerm):
 
     def regularization(self, prediction: Tensor) -> Tensor:
         grad_x, grad_y = grads(prediction)
+        return (grad_x**2 + grad_y**2 + self.ε).pow(self.p / 2).mean()
+
+
+class TV_Derivative7(RegularizationTerm):
+    def __init__(self, p=1.0, ε=1e-6):
+        self.p = p
+        self.ε = ε
+
+    def regularization(self, prediction: Tensor) -> Tensor:
+        grad_x, grad_y = derivative7(prediction)
         return (grad_x**2 + grad_y**2 + self.ε).pow(self.p / 2).mean()
 
 
