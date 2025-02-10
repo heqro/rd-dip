@@ -18,32 +18,32 @@ if is_debugging:
         "--subject",
         "1",
         "--noise_std",
-        "0.15",
+        "0.10",
         "--fidelities",
-        "Rician_Norm:1.0:0.15",
-        "--regularizers",
-        "Total_Variation:1.0:1.0:0.75",
-        "--max_its",
-        "30",
+        "Rician_Norm:1.0:0.10",
+        # "--regularizers",
+        # "Total_Variation:1.0:1.0:0.75",
+        # "--max_its",
+        # "30",
         "--dip_noise_type",
-        "Rician",
+        "Gaussian",
         "--dip_noise_std",
-        "0.05",
+        "0.15",
         "--model",
         "UNet",
         "--lr",
-        "1e-3",
-        "--channels_list",
-        "3",
-        "128",
-        "128",
-        "128",
-        "128",
-        "--skip_sizes",
-        "4",
-        "4",
-        "4",
-        "4",
+        "5e-4",
+        # "--channels_list",
+        # "3",
+        # "128",
+        # "128",
+        # "128",
+        # "128",
+        # "--skip_sizes",
+        # "4",
+        # "4",
+        # "4",
+        # "4",
     ]
 
 
@@ -207,7 +207,7 @@ noisy_gt_cpu, gt_cpu, mask_cpu = load_experiment_data(
 
 images = ProblemImages(
     ground_truth=gt_cpu[None, ...],
-    noisy_image=noisy_gt_cpu[None, ...],
+    noisy_image=_utils.anscombe_transform(noisy_gt_cpu[None, ...], float(std)),
     mask=mask_cpu[None, ...],
     rician_noise_std=float(std),
 ).to(dev)
@@ -253,3 +253,5 @@ save_best_ssim(best_img, images.ground_truth, "", subject_idx=args.subject, tag=
 
 with open(f"results/im_{args.subject}/def_jsons/{tag}.json", "w") as json_file:
     json.dump(report, json_file, indent=4)
+
+print(f"Finalized experiment {tag}")
