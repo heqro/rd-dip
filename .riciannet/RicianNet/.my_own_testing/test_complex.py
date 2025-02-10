@@ -6,6 +6,7 @@ from skimage.metrics import (
     peak_signal_noise_ratio as psnr,
     structural_similarity as ssim,
 )
+from PIL import Image
 
 mat = scipy.io.loadmat("../testdata/Brain1.mat")
 noiseSigma = 15
@@ -35,17 +36,9 @@ caffe.set_mode_cpu()  # Use caffe.set_mode_gpu() if you want to use GPU
 
 net = caffe.Net(prototext_path, weights_path, caffe.TEST)
 
-# print(dir(net))
-# ['__class__', '__delattr__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__gt__', '__hash__', '__init__', '__init_subclass__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', '_backward', '_batch', '_blob_loss_weights', '_blob_names', '_blobs', '_bottom_ids', '_forward', '_inputs', '_layer_names', '_outputs', '_set_input_arrays', '_top_ids', 'after_backward', 'after_forward', 'backward', 'before_backward', 'before_forward', 'blob_loss_weights', 'blobs', 'bottom_names', 'clear_param_diffs', 'copy_from', 'forward', 'forward_all', 'forward_backward_all', 'inputs', 'layer_dict', 'layers', 'load_hdf5', 'outputs', 'params', 'reshape', 'save', 'save_hdf5', 'set_input_arrays', 'share_with', 'top_names']
-
-
-# img_in = in_img.T
-
-# np.rot90(np.rot90(np.rot90(img_in)))
 
 result = net.forward(data=np.rot90(in_img)[None, None, ...])
 result_conv13 = result["conv13"].squeeze()
-# result_conv13 = (result_conv13 - result_conv13.min()) / (result_conv13.max() - result_conv13.min())
 
 plt.imsave(f"Denoised_{noiseSigma}.png", result_conv13, cmap="gray")
 
@@ -57,21 +50,18 @@ plt.imsave(f"Residuo_{noiseSigma}.png", residuo, cmap="gray")
 
 print(psnr(result_conv13, np.rot90(brain_real), data_range=1.0))
 
+# Load msk
+mask = Image.open("Brain1_mask.png").convert("L")  # Convert to grayscale
+mask = np.array(mask)
 
-error = (result_conv13.T - brain_real) ** 2
-print(10 * np.log10(1 / error.mean()))
+
+print(
+    psnr(
+        result_conv13[:256, :256] * mask,
+        np.rot90(brain_real)[:256, :256],
+        data_range=1.0,
+    )
+)
 
 
 print(ssim(result_conv13, np.rot90(brain_real), data_range=1.0))
-
-
-# array.reshape(1, 1, 256, 270)
-
-# print(brain.dtype)
-# print(in_img.dtype)
-
-# TODO:
-# ¿Cómo se calcularía la PSNR cuando la red ha limpiado 'más de la cuenta'? Es decir, hemos visto que las imágenes ya de por sí traen ruido.
-# Hacer normalización como figura en test_complex.m
-# ¿Quién es Brain1 en el contexto del repositorio de Brainweb-dl? Es una pregunta importante, ya que nppy segmenta toda la imagen volumétrica, devolviendo otra imagen volumétrica del cerebro.
-print()

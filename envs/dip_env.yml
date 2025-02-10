@@ -1,4 +1,4 @@
-name: /mnt/data_drive/hrodrigo/mri_rician_noise/envs/dip_env
+name: dip_env_freeze
 channels:
   - pytorch
   - nvidia
