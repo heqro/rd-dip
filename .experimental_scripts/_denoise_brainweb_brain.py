@@ -4,7 +4,7 @@ import torch
 import _utils
 import numpy as np
 from losses_and_regularizers import *
-from dip_denoise import Problem, ProblemImages, solve, initialize_experiment_report
+from denoise import Problem, ProblemImages, solve, initialize_experiment_report
 from skimage.metrics import structural_similarity as ssim_sk
 from models import *
 import argparse
@@ -18,32 +18,32 @@ if is_debugging:
         "--subject",
         "1",
         "--noise_std",
-        "0.10",
-        "--fidelities",
-        "Rician_Norm:1.0:0.10",
-        # "--regularizers",
-        # "Total_Variation:1.0:1.0:0.75",
-        # "--max_its",
-        # "30",
-        "--dip_noise_type",
-        "Gaussian",
-        "--dip_noise_std",
         "0.15",
+        "--fidelities",
+        "Rician_Norm:1.0:0.15",
+        "--regularizers",
+        "Total_Variation:1.0:1.0:0.75",
+        "--max_its",
+        "30",
+        "--dip_noise_type",
+        "Rician",
+        "--dip_noise_std",
+        "0.05",
         "--model",
         "UNet",
         "--lr",
-        "5e-4",
-        # "--channels_list",
-        # "3",
-        # "128",
-        # "128",
-        # "128",
-        # "128",
-        # "--skip_sizes",
-        # "4",
-        # "4",
-        # "4",
-        # "4",
+        "1e-3",
+        "--channels_list",
+        "3",
+        "128",
+        "128",
+        "128",
+        "128",
+        "--skip_sizes",
+        "4",
+        "4",
+        "4",
+        "4",
     ]
 
 
@@ -207,7 +207,7 @@ noisy_gt_cpu, gt_cpu, mask_cpu = load_experiment_data(
 
 images = ProblemImages(
     ground_truth=gt_cpu[None, ...],
-    noisy_image=_utils.anscombe_transform(noisy_gt_cpu[None, ...], float(std)),
+    noisy_image=noisy_gt_cpu[None, ...],
     mask=mask_cpu[None, ...],
     rician_noise_std=float(std),
 ).to(dev)
@@ -253,5 +253,3 @@ save_best_ssim(best_img, images.ground_truth, "", subject_idx=args.subject, tag=
 
 with open(f"results/im_{args.subject}/def_jsons/{tag}.json", "w") as json_file:
     json.dump(report, json_file, indent=4)
-
-print(f"Finalized experiment {tag}")

@@ -8,7 +8,7 @@ class UNet(torch.nn.Module):
         self,
         n_channels_output: int = 1,
         channels_list: list[int] = [3, 128, 128, 128, 128, 128],
-        skip_sizes=[4, 4, 4, 4, 4],
+        skip_sizes: list[int] = [4, 4, 4, 4, 4],
     ):
         def get_skip(ch_in: int, skip_size: int):
             return nn.Sequential(

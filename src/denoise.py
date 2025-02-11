@@ -6,6 +6,7 @@ from piqa import PSNR, SSIM
 from torch.nn.functional import mse_loss as MSE
 from torch import Tensor, nn
 from typing import Callable, Literal, Tuple, TypedDict
+from models import UNet
 
 
 class StoppingCriteria(TypedDict):
@@ -72,7 +73,7 @@ class ProblemImages(torch.nn.Module):
 class DIP(TypedDict):
     noise_fn: Callable[..., Tensor]
     std: float
-    model: nn.Module
+    model: UNet
     seed: Tensor
     simultaneous_perturbations: int
 
@@ -93,33 +94,38 @@ def initialize_experiment_report(p: Problem) -> ExperimentReport:
     aux = ""
     if p["dip_config"]["noise_fn"] == _utils.add_rician_noise:
         aux = "Rician"
-    if p["dip_config"]["noise_fn"] == _utils.add_gaussian_noise:
+    elif p["dip_config"]["noise_fn"] == _utils.add_gaussian_noise:
         aux = "Gaussian"
-    return {
+    opt_profile: OptimizerProfile = {
+        "lr": [p["optimizer"].param_groups[-1]["lr"]],
+        "name": type(p["optimizer"]).__name__,
+    }
+    stopping_criteria: StoppingCriteria = {"entire_image_idx": None, "mask_idx": None}
+    architecture: dict[str, str] = {
+        "name": p["dip_config"]["model"]._get_name(),
+        "channels_list": str(p["dip_config"]["model"].channels_list),
+        "skips_sizes": str(p["dip_config"]["model"].skip_sizes),
+    }
+    dip_config: DIP_Report = {
+        "it_noise_type": aux,
+        "it_noise_std": p["dip_config"]["std"],
+        "simultaneous_perturbations": p["dip_config"]["simultaneous_perturbations"],
+        "net_architecture": architecture,
+    }
+    report: ExperimentReport = {
         "exit_code": 0,
         "name": p["image_name"],
-        "dip_config": {
-            "it_noise_type": aux,
-            "it_noise_std": p["dip_config"]["std"],
-            "simultaneous_perturbations": p["dip_config"]["simultaneous_perturbations"],
-            "net_architecture": {
-                "name": p["dip_config"]["model"]._get_name(),
-                "channels_list": p["dip_config"]["model"].channels_list,
-                "skips_sizes": p["dip_config"]["model"].skip_sizes,
-            },
-        },
+        "dip_config": dip_config,
         "image_noise_std": p["images"].rician_noise_std,
         "loss_log": {"overall_loss": [], "addends": {}},
         "psnr_entire_image_log": [],
         "psnr_mask_log": [],
         "ssim_mask_log": [],
         "ssim_entire_image_log": [],
-        "stopping_criteria_indices": {"entire_image_idx": None, "mask_idx": None},
-        "optimizer": {
-            "lr": [p["optimizer"].param_groups[-1]["lr"]],
-            "name": type(p["optimizer"]).__name__,
-        },
+        "stopping_criteria_indices": stopping_criteria,
+        "optimizer": opt_profile,
     }
+    return report
 
 
 def stopping_criterion(prediction: Tensor, noisy_img: Tensor, std: float):
