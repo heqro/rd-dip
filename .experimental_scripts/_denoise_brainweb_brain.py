@@ -1,16 +1,21 @@
 from typing import Literal
 from piqa import PSNR, SSIM
 import torch
-import _utils
 import numpy as np
-from losses_and_regularizers import *
-from denoise import Problem, ProblemImages, solve, initialize_experiment_report
 from skimage.metrics import structural_similarity as ssim_sk
-from models import *
 import argparse
 import json
 import sys
 
+sys.path.append("../libs/image-utils/src")
+from my_io import print_image, load_serialized_image, load_gray_image
+from noise import add_gaussian_noise, add_rician_noise
+from spatial_transforms import crop_image
+
+sys.path.append("../src")
+from models import *
+from losses_and_regularizers import *
+from denoise import Problem, ProblemImages, solve, initialize_experiment_report
 
 is_debugging = False
 if is_debugging:
@@ -46,7 +51,8 @@ if is_debugging:
         "4",
     ]
 
-
+dataset_path = "../datasets/dataset"
+results_path = "../results"
 dev = (
     torch.device("cuda")
     if torch.cuda.is_available()  # and not is_debugging
@@ -70,9 +76,9 @@ def generate_unique_uuid(target_folder):
 
 
 def save_best_img(best_img: Tensor, it: str, subject_idx: str, tag: str):
-    _utils.print_image(
+    print_image(
         (best_img.squeeze().cpu().detach().numpy() * 255).astype(np.uint8),
-        f"results/im_{subject_idx}/def_denoised/{tag}{it}.png",
+        f"{results_path}/im_{subject_idx}/def_denoised/{tag}{it}.png",
     )
 
 
@@ -86,17 +92,17 @@ def save_best_ssim(
         channel_axis=0,
         full=True,
     )  # img_ssim is HxW
-    _utils.print_image(
+    print_image(
         (img_ssim.clip(0, 1) * 255).astype(np.uint8),
-        f"results/im_{subject_idx}/def_ssim/{tag}{it}.png",
+        f"{results_path}/im_{subject_idx}/def_ssim/{tag}{it}.png",
     )
 
 
 def get_dip_noise_fn(noise_type: Literal["", "Gaussian", "Rician"]):
     if noise_type == "Rician":
-        return _utils.add_rician_noise
+        return add_rician_noise
     if noise_type == "Gaussian":
-        return _utils.add_gaussian_noise
+        return add_gaussian_noise
 
     def id(x: Tensor):
         return x
@@ -109,26 +115,27 @@ def load_experiment_data(
     noise_std: str,
     print_noisy_image: bool = False,
 ):
-    gt_cpu = _utils.crop_image(
-        _utils.load_serialized_image(
-            f".brainweb_test_data/im_{subject_idx}/gt.pt",
+    # cropping is no-op for our datasets
+    gt_cpu = crop_image(
+        load_serialized_image(
+            f"{dataset_path}/im_{subject_idx}/gt.pt",
             normalize=False,
         )
-    )  # image is already normalized
-    mask_cpu = _utils.crop_image(
-        _utils.load_gray_image(
-            f".brainweb_test_data/im_{subject_idx}/mask.png",
-            is_mask=True,
+    )
+    mask_cpu = crop_image(
+        load_gray_image(
+            f"{dataset_path}/im_{subject_idx}/mask.png",
+            as_mask=True,
         )
     )
-    noisy_gt_cpu = _utils.crop_image(
-        _utils.load_serialized_image(
-            f".brainweb_test_data/im_{subject_idx}/Std{noise_std}.pt",
+    noisy_gt_cpu = crop_image(
+        load_serialized_image(
+            f"{dataset_path}/im_{subject_idx}/Std{noise_std}.pt",
             normalize=False,
         )  # image is contaminated (i.e., values not in the interval [0,1]), so we don't normalize
     )
     if print_noisy_image:
-        _utils.print_image(
+        print_image(
             (noisy_gt_cpu.numpy() * 255).astype(np.uint8),
             f"noisy_slice_subject_{subject_idx}_Std{noise_std}.png",
         )
@@ -140,7 +147,6 @@ parser.add_argument(
     "--subject",
     type=str,
     help="The brain subject",
-    default="04",
 )
 parser.add_argument(
     "--noise_std",
@@ -177,7 +183,7 @@ parser.add_argument(
 parser.add_argument(
     "--dip_noise_type", choices=["Gaussian", "Rician", ""], default="Gaussian"
 )
-parser.add_argument("--max_its", type=int, default=30000)
+parser.add_argument("--max_its", type=int, default=15000)
 parser.add_argument("--dip_noise_std", type=float, default=0.15)
 parser.add_argument("--model", type=str, required=not is_debugging)
 parser.add_argument("--lr", type=float, default=1e-2)
@@ -221,7 +227,7 @@ seed = 0.1 * torch.rand(
     images.noisy_image.device
 ).expand(args.N, -1, -1, -1)
 
-tag = generate_unique_uuid(f"results/im_{args.subject}/def_jsons/")
+tag = generate_unique_uuid(f"{results_path}/im_{args.subject}/def_jsons/")
 
 p: Problem = {
     "images": images,
@@ -251,5 +257,5 @@ save_best_ssim(best_img, images.ground_truth, "", subject_idx=args.subject, tag=
 #     break
 
 
-with open(f"results/im_{args.subject}/def_jsons/{tag}.json", "w") as json_file:
+with open(f"{results_path}/im_{args.subject}/def_jsons/{tag}.json", "w") as json_file:
     json.dump(report, json_file, indent=4)

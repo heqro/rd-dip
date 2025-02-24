@@ -4,8 +4,11 @@ import torch
 from torch import Tensor, nn, log
 from torch.special import i0, i1, i0e, i1e
 from typing import List, Tuple
-from _utils import grads, laplacian, prewitt, kirsch, derivative7
 from torch.nn import functional as F
+import sys
+
+sys.path.append("../libs/image-utils/src")
+from filters import grads, prewitt, kirsch, derivative7
 
 
 # Base protocol for losses
@@ -13,10 +16,6 @@ from torch.nn import functional as F
 class FidelityTerm(Protocol):
     @abstractmethod
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
-        pass
-
-    @abstractmethod
-    def get_mask() -> Tensor:
         pass
 
 
@@ -80,11 +79,6 @@ class Gaussian(FidelityTerm):
             print(f"WARN: {self.__class__.__name__} mask features negative entries")
         return (self.mask * (prediction - target)).square().mean()
 
-    def get_mask(self) -> Tensor:
-        if self.mask is None:
-            raise Exception("Mask is None. Apply loss() to initialize it.")
-        return self.mask
-
 
 class Rician(FidelityTerm):
     def __init__(self, std: float):
@@ -93,9 +87,6 @@ class Rician(FidelityTerm):
     def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
         i_arg = prediction * target / self.std**2
         return (prediction**2 / (2 * self.std**2) - (log(i0e(i_arg)) + i_arg)).mean()
-
-    def get_mask(self):
-        raise NotImplementedError("Not implemented yet")
 
 
 class Rician_Norm_Unstable(FidelityTerm):
@@ -121,30 +112,6 @@ class Rician_Norm(FidelityTerm):
         i_arg = prediction * target / self.std**2
         r_inv = i0e(i_arg) / i1e(i_arg)
         return (prediction * r_inv - target).square().mean()
-
-    def get_mask(self):
-        raise NotImplementedError("Not implemented yet")
-
-
-class Laplacian_Rician_Norm(FidelityTerm):
-    def __init__(self, σ: float, λ: float, p: float = 1.0):
-        self.σ = σ
-        self.λ = λ
-        self.p = p
-
-    def loss(self, prediction: Tensor, target: Tensor) -> Tensor:
-        r_inv = i0(prediction * target / self.σ**2) / i1(
-            prediction * target / self.σ**2
-        )
-        Δ = laplacian(prediction, p=self.p, eps=1e-6)
-        return (
-            (
-                (Δ - self.λ * (prediction * r_inv - target))
-                / (self.σ**2 * prediction.shape[1] * prediction.shape[2])
-            )
-            .square()
-            .mean()
-        )
 
     def get_mask(self):
         raise NotImplementedError("Not implemented yet")

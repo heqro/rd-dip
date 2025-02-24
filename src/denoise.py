@@ -1,12 +1,17 @@
 from losses_and_regularizers import CompositeLoss
 import torch
 import numpy as np
-import _utils
 from piqa import PSNR, SSIM
 from torch.nn.functional import mse_loss as MSE
 from torch import Tensor, nn
 from typing import Callable, Literal, Tuple, TypedDict
 from models import UNet
+import sys
+
+sys.path.append("../libs/image-utils/src")
+from noise import add_gaussian_noise, add_rician_noise
+from quality_metrics import psnr_with_mask
+from spatial_transforms import get_bounding_box
 
 
 class StoppingCriteria(TypedDict):
@@ -92,9 +97,9 @@ class Problem(TypedDict):
 
 def initialize_experiment_report(p: Problem) -> ExperimentReport:
     aux = ""
-    if p["dip_config"]["noise_fn"] == _utils.add_rician_noise:
+    if p["dip_config"]["noise_fn"] == add_rician_noise:
         aux = "Rician"
-    elif p["dip_config"]["noise_fn"] == _utils.add_gaussian_noise:
+    elif p["dip_config"]["noise_fn"] == add_gaussian_noise:
         aux = "Gaussian"
     opt_profile: OptimizerProfile = {
         "lr": [p["optimizer"].param_groups[-1]["lr"]],
@@ -154,7 +159,7 @@ def update_report_quality_metrics(
     report["psnr_entire_image_log"] += [
         p["psnr"](prediction, p["images"].ground_truth).item()
     ]
-    it_psnr_mask = _utils.psnr_with_mask(
+    it_psnr_mask = psnr_with_mask(
         prediction, p["images"].ground_truth, p["images"].mask
     ).item()
     report["psnr_mask_log"] += [it_psnr_mask]
@@ -232,7 +237,7 @@ def solve(
     # 🪵🪵
     best_psnr = -np.inf
     best_img = p["images"].noisy_image
-    bounding_box = _utils.get_bounding_box(p["images"].mask)
+    bounding_box = get_bounding_box(p["images"].mask)
 
     for it in range(p["max_its"]):
         p["optimizer"].zero_grad()
@@ -268,7 +273,6 @@ def solve(
             best_img,
         )
 
-        print(f"{it}: {loss.item():.2f}, best_psnr: {best_psnr:.2f}")
         loss.backward()
         p["optimizer"].step()
     update_report_losses(experiment_report, p["loss_config"])

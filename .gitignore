@@ -137,3 +137,7 @@ roi_1.png
 roi_2.png
 roi_3.png
 rois.png
+.experimental_scripts/create_latex_table.py
+.experimental_scripts/generate_output_csv.py
+.experimental_scripts/generate_overall_csv.py
+.experimental_scripts/generate_summary_csv.py
