@@ -1,0 +1,3 @@
+[submodule "libs/image-utils"]
+	path = libs/image-utils
+	url = git@github.com:heqro/image-utils.git
