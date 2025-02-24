@@ -1,3 +1,6 @@
 [submodule "libs/image-utils"]
 	path = libs/image-utils
 	url = git@github.com:heqro/image-utils.git
+[submodule "datasets"]
+	path = datasets
+	url = git@github.com:heqro/brains-to-denoise.git
