@@ -10,9 +10,12 @@ This repository contains the dependencies, code and datasets for harnessing RD-D
 
 ## Visualization of the (iterative) denoising process
 
-| Ground-truth  | Noisy ($\sigma=0.15$)  | RD-DIP  |
-|---|---|---|
-| <img src="docs/images/gt.png" alt="Description" style="width: 100%; max-width: 256px;"/>  | <img src="docs/images/Std0.15.png" alt="Description" style="width: 100%; max-width: 256px;"/> |  <img src="docs/images/rd_dip.gif" alt="Description" style="width: 100%; max-width: 256px;"/> |
+|   |   |
+|---|---|
+| **Ground-truth**  | **Noisy** ($\sigma=0.15$)  |
+| <img src="docs/images/gt.png" alt="Description" style="width: 100%; max-width: 256px;"/>  | <img src="docs/images/Std0.15.png" alt="Description" style="width: 100%; max-width: 256px;"/> 
+| **Baseline DIP** | **RD-DIP** |
+| <img src="docs/images/baseline_dip.gif" alt="Description" style="width: 100%; max-width: 256px;"/> | <img src="docs/images/rd_dip.gif" alt="Description" style="width: 100%; max-width: 256px;"/> |
 
 
 
