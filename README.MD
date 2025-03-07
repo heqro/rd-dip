@@ -21,20 +21,21 @@ This repository contains the dependencies, code and datasets for harnessing RD-D
 
 ## Getting started
 
-Clone the repository, initialize the modules and install the requirements:
-
+Clone the repository and initialize the modules:
 ```
 git clone git@github.com:heqro/rd-dip.git
 cd rd-dip
 git submodule init
 git submodule update --recursive --remote
-pip install -r requirements.txt
 ```
 
-It is likely that, in the future, the file [`requirements.txt`](requirements.txt) may refer to software packages that are not obtainable anymore. Strictly speaking, only the following packages were explicitly installed by us for developing and executing the project:
+Now, create a virtual environment, activate it and then and install the dependencies:
+```
+python -m venv .venv
+source .venv/bin/activate 
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install piqa
+pip install scikit-image
+```
 
-- `torch` with the CUDA 11.8 version.
-- `piqa`, used for in-GPU quality measurements.
-- `scikit-image`, used for computing SSIM image.
-
-Everything else that appears in the file came installed as dependencies by `pip`.
+Note that the previous codeblock installs `torch` with the CUDA 11.8 version, as it is the version this software package was developed with.
