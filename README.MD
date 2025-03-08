@@ -4,11 +4,12 @@
 
 This repository contains the dependencies, code and datasets for harnessing RD-DIP, a major enhancement for the unsupervised learning Deep Image Prior (DIP) that allows it to perform Rician denoising.
 
+Try it without installing *anything*—click [here](https://colab.research.google.com/github/heqro/rd-dip/blob/main/demonstration-of-usage.ipynb) to open the project in Google Colab!
+
 ## Graphical abstract
 
 ![](docs/images/grabs.png)
 
-Try it without installing *anything*—click [here](https://colab.research.google.com/github/heqro/rd-dip/blob/main/demonstration-of-usage.ipynb) to open the project in Google Colab!
 
 ## Visualization of the (iterative) denoising process
 
