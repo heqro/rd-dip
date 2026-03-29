@@ -1,4 +1,4 @@
-from losses_and_regularizers import CompositeLoss
+from losses import CompositeLoss
 import torch
 import numpy as np
 from piqa import PSNR, SSIM
