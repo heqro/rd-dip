@@ -34,13 +34,11 @@ git submodule init
 git submodule update --recursive --remote
 ```
 
-Now, create a virtual environment, activate it and then and install the dependencies:
+Create a Conda environment, activate it, and install the dependencies:
 ```
-python -m venv .venv
-source .venv/bin/activate 
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+conda create --name rd-dip python -y
+conda activate rd-dip
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 pip install piqa
 pip install scikit-image
 ```
-
-Note that the previous codeblock installs `torch` with the CUDA 11.8 version, as it is the version this software package was developed with.
